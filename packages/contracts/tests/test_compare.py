@@ -1,12 +1,22 @@
 from __future__ import annotations
 
-import pytest
-
 from preflight_contracts.compare import (
-    ConflictStrength, Result, comparison_digest, evaluate, find_conflicts, is_ready,
+    ConflictStrength,
+    Result,
+    comparison_digest,
+    evaluate,
+    find_conflicts,
+    is_ready,
 )
 from preflight_contracts.rules import (
-    AssetType, Confidence, Operator, Rule, RulePack, Severity, SourceEvidence, TrustTier,
+    AssetType,
+    Confidence,
+    Operator,
+    Rule,
+    RulePack,
+    Severity,
+    SourceEvidence,
+    TrustTier,
 )
 
 

@@ -11,10 +11,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 from typing import Any
-
 
 SCHEMA_VERSION = "1.0.0"
 
@@ -104,7 +103,9 @@ class SourceEvidence:
         if not self.quoted_excerpt.strip():
             raise RuleRejected(f"{self.evidence_id}: evidence must carry a quoted excerpt")
         if self.private and self.url:
-            raise RuleRejected(f"{self.evidence_id}: private specifications must not carry a public URL")
+            raise RuleRejected(
+                f"{self.evidence_id}: private specifications must not carry a public URL"
+            )
 
 
 @dataclass(frozen=True)
@@ -156,7 +157,10 @@ def _validate_value(operator: Operator, value: Any) -> None:
         return
     if operator in (Operator.GTE, Operator.LTE):
         if not isinstance(value, (int, float)):
-            raise RuleRejected(f"operator {operator.value} requires a number, got {type(value).__name__}")
+            raise RuleRejected(
+                f"operator {operator.value} requires a number, "
+                f"got {type(value).__name__}"
+            )
         return
     if value is None:
         raise RuleRejected(f"operator {operator.value} requires a value")

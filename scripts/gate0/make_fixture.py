@@ -69,7 +69,7 @@ def make_master(path: Path) -> None:
             "-movflags", "+use_metadata_tags",
             str(path),
         ],
-        f"master.mp4 — 1080p25, hot audio, 4:3 flag, no fast start",
+        "master.mp4 — 1080p25, hot audio, 4:3 flag, no fast start",
     )
 
 

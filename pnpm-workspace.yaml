@@ -1,0 +1,7 @@
+packages:
+  - "apps/web"
+allowBuilds:
+  sharp: set this to true or false
+fetchRetries: 8
+fetchRetryMaxtimeout: 300000
+fetchTimeout: 600000

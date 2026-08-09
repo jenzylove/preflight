@@ -18,13 +18,19 @@ provider result the project forbids.
 from __future__ import annotations
 
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "packages" / "contracts"))
 
 from preflight_contracts.rules import (  # noqa: E402
-    AssetType, Confidence, Operator, Rule, RulePack, Severity, SourceEvidence, TrustTier,
+    AssetType,
+    Confidence,
+    Operator,
+    Rule,
+    RulePack,
+    Severity,
+    SourceEvidence,
+    TrustTier,
 )
 
 RETRIEVED_AT = "2026-08-09T00:00:00+00:00"
@@ -75,7 +81,8 @@ _yt_ev = {
     ),
     "yt_bitrate": _evidence(
         "yt_bitrate", YOUTUBE_URL,
-        "Recommended video bitrates for SDR uploads, standard frame rate (24, 25, 30): 1080p — 8 Mbps.",
+        "Recommended video bitrates for SDR uploads, standard frame rate "
+        "(24, 25, 30): 1080p — 8 Mbps.",
     ),
     "yt_colour": _evidence(
         "yt_colour", YOUTUBE_URL,
@@ -96,7 +103,8 @@ YOUTUBE = RulePack(
         _rule("yt-5", AssetType.VIDEO, "displayAspectRatio", Operator.EQ, "16:9", "yt_colour"),
         _rule("yt-6", AssetType.VIDEO, "colourPrimaries", Operator.EQ, "bt709", "yt_colour",
               severity=Severity.RECOMMENDED),
-        _rule("yt-7", AssetType.VIDEO, "frameRate", Operator.IN, [24, 25, 30, 48, 50, 60], "yt_video"),
+        _rule("yt-7", AssetType.VIDEO, "frameRate", Operator.IN,
+              [24, 25, 30, 48, 50, 60], "yt_video"),
         _rule("yt-8", AssetType.VIDEO, "bitrateBps", Operator.EQ, 8_000_000, "yt_bitrate",
               severity=Severity.RECOMMENDED, note="1080p SDR at standard frame rate"),
         _rule("yt-9", AssetType.AUDIO, "codec", Operator.IN, ["aac", "opus"], "yt_audio"),

@@ -26,7 +26,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from preflight_contracts import inspect_media as inspector  # noqa: E402
 from preflight_contracts import repairs  # noqa: E402
 from preflight_contracts.compare import (  # noqa: E402
-    Result, comparison_digest, evaluate_pack, find_conflicts, is_ready,
+    Result,
+    comparison_digest,
+    evaluate_pack,
+    find_conflicts,
+    is_ready,
 )
 from preflight_contracts.rules import AssetType, RulePack  # noqa: E402
 from seed_rule_packs import ARTDOCFEST, YOUTUBE  # noqa: E402
@@ -97,7 +101,8 @@ def main() -> int:
     original_picture = inspector.video_stream_md5(master)
     measured = measure(master, subtitle, poster)
 
-    print(f"  ffprobe {inspector.tool_version('ffprobe')}, ffmpeg {inspector.tool_version('ffmpeg')}")
+    print(f"  ffprobe {inspector.tool_version('ffprobe')}, "
+          f"ffmpeg {inspector.tool_version('ffmpeg')}")
     print(f"  master sha256        {original_sha[:32]}…")
     print(f"  picture md5          {original_picture}")
     print(f"  integrated loudness  {measured[AssetType.AUDIO]['integratedLoudnessLufs']} LUFS")

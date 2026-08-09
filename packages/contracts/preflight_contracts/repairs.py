@@ -24,7 +24,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -68,7 +68,7 @@ def sha256_file(path: Path) -> str:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
@@ -106,7 +106,9 @@ def normalise_loudness(
     measured = measure_loudness(source)
     stats = measured["_loudnormStats"]
     if measured["integratedLoudnessLufs"] is None:
-        raise RepairError("cannot normalise: no measurable programme loudness (is the audio silent?)")
+        raise RepairError(
+            "cannot normalise: no measurable programme loudness (is the audio silent?)"
+        )
 
     loudnorm = (
         f"loudnorm=I={target_lufs}:TP={true_peak_dbtp}:LRA={loudness_range_lu}"

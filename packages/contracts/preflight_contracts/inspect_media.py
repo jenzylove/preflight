@@ -15,7 +15,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from fractions import Fraction
 from pathlib import Path
 from typing import Any
@@ -52,7 +52,7 @@ class Evidence:
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    return datetime.now(UTC).isoformat(timespec="seconds")
 
 
 def _require(tool: str) -> str:
@@ -161,7 +161,11 @@ def inspect_video(path: Path) -> Evidence:
         "colourPrimaries": video.get("color_primaries"),
         "colourTransfer": video.get("color_transfer"),
         "colourMatrix": video.get("color_space"),
-        "scanType": "progressive" if video.get("field_order", "progressive") == "progressive" else "interlaced",
+        "scanType": (
+            "progressive"
+            if video.get("field_order", "progressive") == "progressive"
+            else "interlaced"
+        ),
         "fastStart": has_faststart,
         # Recorded so the caller can prove the picture was left untouched.
         "videoStreamMd5": None,
@@ -284,7 +288,9 @@ def inspect_subtitle(path: Path) -> Evidence:
         "burnedIn": False,   # a sidecar file is by definition not burned in
         "language": None,
     }
-    return Evidence(AssetType.SUBTITLE, "preflight.subtitles", INSPECTOR_SCHEMA_VERSION, _now(), props)
+    return Evidence(
+        AssetType.SUBTITLE, "preflight.subtitles", INSPECTOR_SCHEMA_VERSION, _now(), props
+    )
 
 
 # --------------------------------------------------------------------------
@@ -292,8 +298,8 @@ def inspect_subtitle(path: Path) -> Evidence:
 # --------------------------------------------------------------------------
 
 def inspect_poster(path: Path) -> Evidence:
-    from PIL import Image  # imported lazily so subtitle-only runs need no Pillow
     import PIL
+    from PIL import Image  # imported lazily so subtitle-only runs need no Pillow
 
     with Image.open(path) as image:
         width, height = image.size

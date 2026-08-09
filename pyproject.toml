@@ -1,0 +1,58 @@
+[project]
+name = "preflight"
+version = "0.1.0"
+description = "Destination-aware delivery compliance for finished media"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    "pydantic>=2.9",
+    "pydantic-settings>=2.6",
+    "sqlalchemy>=2.0",
+    "psycopg[binary]>=3.2",
+    "alembic>=1.14",
+    "pillow>=11.0",
+    "httpx>=0.28",
+    "python-multipart>=0.0.17",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.8",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["packages/contracts/tests", "apps/api/tests"]
+pythonpath = ["packages/contracts", "apps/api"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+exclude = ["out", "work", ".venv"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "S"]
+ignore = [
+    "S101",  # assert is the point in tests
+    "B008",  # FastAPI Depends() in defaults is the documented idiom
+    # `class X(str, Enum)` is deliberate rather than StrEnum: these values are
+    # serialised into JSONB, API responses and digests, and the explicit str
+    # base keeps that behaviour identical regardless of Python version.
+    "UP042",
+]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/*" = ["S105", "S106"]
+# Media tooling is invoked as an argument list and never through a shell, so
+# user-controlled filenames cannot be interpolated into a command. See the
+# comment on _run() in inspect_media.py.
+"packages/contracts/preflight_contracts/inspect_media.py" = ["S603"]
+"packages/contracts/preflight_contracts/repairs.py" = ["S603"]
+# "PASS" is an assertion result, not a credential.
+"packages/contracts/preflight_contracts/compare.py" = ["S105"]
+"scripts/*" = ["S603", "S607"]

@@ -7,10 +7,13 @@ to cause. They should be read as the specification, not as coverage.
 from __future__ import annotations
 
 import pytest
-
 from preflight_contracts.rules import (
-    AssetType, Confidence, Operator, RulePack, RuleRejected, Severity,
-    SourceEvidence, TrustTier, build_rule,
+    RulePack,
+    RuleRejected,
+    Severity,
+    SourceEvidence,
+    TrustTier,
+    build_rule,
 )
 
 

@@ -171,7 +171,10 @@ def evaluate(
         return build(Result.AMBIGUOUS, why="Requirement could not be read with confidence.")
 
     if measured is None and rule.operator not in (Operator.ABSENT,):
-        return build(Result.NOT_MEASURED, why="This property was not measured on the supplied assets.")
+        return build(
+            Result.NOT_MEASURED,
+            why="This property was not measured on the supplied assets.",
+        )
 
     if _satisfied(rule, measured):
         return build(Result.PASS)
@@ -183,7 +186,8 @@ def evaluate(
     if key in YELLOW_FIELDS:
         return build(
             Result.REVIEW_REQUIRED,
-            why="Correcting this re-encodes the picture and can change quality. Needs your decision.",
+            why="Correcting this re-encodes the picture and can change quality. "
+                "Needs your decision.",
         )
 
     return build(Result.UNSUPPORTED, why="No supported operation can satisfy this requirement.")
@@ -218,7 +222,10 @@ def comparison_digest(assertions: list[Assertion]) -> str:
     """Stable across runs for equivalent inputs — the proof of determinism."""
     payload = json.dumps(
         sorted(
-            [f"{a.destination_id}:{a.rule_id}:{a.result.value}:{_norm(a.measured)}" for a in assertions]
+            [
+                f"{a.destination_id}:{a.rule_id}:{a.result.value}:{_norm(a.measured)}"
+                for a in assertions
+            ]
         ),
         separators=(",", ":"),
     )
@@ -272,7 +279,9 @@ def find_conflicts(packs: list[RulePack]) -> list[dict[str, Any]]:
                 conflicts.append({
                     "assetType": asset_type.value,
                     "field": field_name,
-                    "strength": (ConflictStrength.HARD if both_required else ConflictStrength.SOFT).value,
+                    "strength": (
+                        ConflictStrength.HARD if both_required else ConflictStrength.SOFT
+                    ).value,
                     "destinations": [pack_a.destination_id, pack_b.destination_id],
                     "requirements": [_describe(rule_a), _describe(rule_b)],
                     "severities": [rule_a.severity.value, rule_b.severity.value],

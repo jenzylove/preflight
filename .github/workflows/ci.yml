@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  contracts:
+    name: contracts and state machines
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: lint
+        run: ruff check .
+
+      - name: test
+        run: pytest packages/contracts/tests apps/api/tests
+
+      # The schema carries invariants (a package cannot be VERIFIED without a
+      # hash, a manifest and output-side validation). If it stops compiling to
+      # real PostgreSQL, those invariants are not being enforced anywhere.
+      - name: schema compiles to postgresql
+        run: python scripts/print_schema_sql.py > /dev/null
+
+  gate0:
+    name: gate 0 — the transaction still works
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: install ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+
+      - name: install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      # The spike is a regression test, not a one-off demo. If a change breaks
+      # the ability to measure, repair and independently revalidate a real
+      # file, CI fails — which is the only way the README's claims stay true.
+      - name: generate fixture
+        run: python scripts/gate0/make_fixture.py
+
+      - name: run the end-to-end spike
+        run: python scripts/gate0/run_spike.py
+
+      - name: destinations still genuinely conflict
+        run: python scripts/gate0/check_conflicts.py
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: gate0-report
+          path: out/gate0/gate0_report.json
