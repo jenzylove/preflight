@@ -70,6 +70,11 @@ jobs:
       - name: generate fixture
         run: python scripts/gate0/make_fixture.py
 
+      # The worker tests operate on real files produced by ffmpeg. Mocking it
+      # would let every one of them pass while the product corrupted media.
+      - name: worker operations on real media
+        run: pytest apps/worker/tests
+
       - name: run the end-to-end spike
         run: python scripts/gate0/run_spike.py
 

@@ -30,6 +30,7 @@ class Settings(BaseSettings):
     gcs_bucket: str = Field(default="")
     vertex_model: str = Field(default="gemini-2.5-pro")
     firebase_project_id: str = Field(default="")
+    worker_base_url: str = Field(default="http://localhost:8080")
 
     max_upload_bytes: int = Field(default=2 * 1024 * 1024 * 1024)
     max_job_seconds: int = Field(default=900)

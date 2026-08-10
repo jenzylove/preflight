@@ -26,8 +26,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/contracts/tests", "apps/api/tests", "apps/agent/tests"]
-pythonpath = ["packages/contracts", "apps/api", "apps/agent"]
+testpaths = ["packages/contracts/tests", "apps/api/tests", "apps/agent/tests", "apps/worker/tests"]
+pythonpath = ["packages/contracts", "apps/api", "apps/agent", "apps/worker"]
 addopts = "-q"
 
 [tool.ruff]
@@ -47,7 +47,10 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"**/tests/*" = ["S105", "S106"]
+# Worker tests build their fixtures by invoking ffmpeg directly, with a fixed
+# argument list and no user input. Mocking it would defeat the purpose of the
+# tests, which is to check what really happens to real media.
+"**/tests/*" = ["S105", "S106", "S603", "S607"]
 # Media tooling is invoked as an argument list and never through a shell, so
 # user-controlled filenames cannot be interpolated into a command. See the
 # comment on _run() in inspect_media.py.
