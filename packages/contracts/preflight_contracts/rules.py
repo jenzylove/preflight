@@ -110,7 +110,16 @@ class SourceEvidence:
 
 @dataclass(frozen=True)
 class Rule:
-    """One checkable requirement, bound to the evidence that published it."""
+    """One checkable requirement, bound to the evidence that published it.
+
+    ``applies_when`` is what makes real specifications representable. Published
+    requirements are routinely conditional — Artdocfest asks for 20-30 Mbps at
+    FullHD and 90-120 Mbps at 4K. Without conditions those two statements look
+    like a contradiction, and a system that reports them as one would block
+    every delivery on an ambiguity that does not exist.
+
+    An empty ``applies_when`` means the requirement is unconditional.
+    """
 
     rule_id: str
     asset_type: AssetType
@@ -121,6 +130,24 @@ class Rule:
     source_evidence_id: str
     confidence: Confidence
     note: str = ""
+    applies_when: dict[str, Any] = field(default_factory=dict)
+
+    def condition_key(self) -> str:
+        """Stable identity of this rule's scope, for grouping and comparison."""
+        return json.dumps(self.applies_when, sort_keys=True, separators=(",", ":"))
+
+    def applies_to(self, measured: dict[str, Any]) -> bool:
+        """Whether this rule is in scope for the asset actually supplied."""
+        for prop, expected in self.applies_when.items():
+            actual = measured.get(prop)
+            if actual is None:
+                return False
+            if isinstance(expected, list):
+                if not any(_loose_equal(actual, v) for v in expected):
+                    return False
+            elif not _loose_equal(actual, expected):
+                return False
+        return True
 
     def digest(self) -> str:
         payload = json.dumps(
@@ -130,11 +157,21 @@ class Rule:
                 "operator": self.operator.value,
                 "value": self.value,
                 "severity": self.severity.value,
+                "appliesWhen": self.applies_when,
             },
             sort_keys=True,
             separators=(",", ":"),
         )
         return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _loose_equal(a: Any, b: Any) -> bool:
+    if isinstance(a, str) and isinstance(b, str):
+        return a.strip().lower() == b.strip().lower()
+    try:
+        return float(a) == float(b)
+    except (TypeError, ValueError):
+        return a == b
 
 
 def _validate_value(operator: Operator, value: Any) -> None:
@@ -202,6 +239,8 @@ def build_rule(proposed: dict[str, Any], evidence: SourceEvidence, rule_id: str)
 
     severity = _derive_severity(claimed_severity, evidence.trust_tier, confidence)
 
+    conditions = _validate_conditions(proposed.get("appliesWhen") or {}, asset_type)
+
     return Rule(
         rule_id=rule_id,
         asset_type=asset_type,
@@ -212,7 +251,33 @@ def build_rule(proposed: dict[str, Any], evidence: SourceEvidence, rule_id: str)
         source_evidence_id=evidence.evidence_id,
         confidence=confidence,
         note=str(proposed.get("note", ""))[:500],
+        applies_when=conditions,
     )
+
+
+def _validate_conditions(raw: Any, asset_type: AssetType) -> dict[str, Any]:
+    """Conditions may only reference properties Preflight can measure.
+
+    A condition on something unmeasurable would silently disable the rule,
+    which is a worse failure than rejecting it — the requirement would appear
+    to be enforced while never actually being checked.
+    """
+    if not isinstance(raw, dict):
+        raise RuleRejected(f"appliesWhen must be an object, got {type(raw).__name__}")
+
+    measurable = MEASURABLE_FIELDS[asset_type] | {
+        f for fields in MEASURABLE_FIELDS.values() for f in fields
+    }
+    validated: dict[str, Any] = {}
+    for prop, expected in raw.items():
+        if prop not in measurable:
+            raise RuleRejected(
+                f"condition references {prop!r}, which Preflight cannot measure"
+            )
+        if isinstance(expected, (dict, type(None))):
+            raise RuleRejected(f"condition {prop!r} needs a value or list of values")
+        validated[prop] = list(expected) if isinstance(expected, tuple) else expected
+    return validated
 
 
 def _derive_severity(claimed: Severity, tier: TrustTier, confidence: Confidence) -> Severity:

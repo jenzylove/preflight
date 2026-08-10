@@ -26,8 +26,8 @@ dev = [
 ]
 
 [tool.pytest.ini_options]
-testpaths = ["packages/contracts/tests", "apps/api/tests"]
-pythonpath = ["packages/contracts", "apps/api"]
+testpaths = ["packages/contracts/tests", "apps/api/tests", "apps/agent/tests"]
+pythonpath = ["packages/contracts", "apps/api", "apps/agent"]
 addopts = "-q"
 
 [tool.ruff]
@@ -56,3 +56,6 @@ ignore = [
 # "PASS" is an assertion result, not a credential.
 "packages/contracts/preflight_contracts/compare.py" = ["S105"]
 "scripts/*" = ["S603", "S607"]
+# The Parallel endpoint is a module constant, not user input, and the scheme is
+# fixed https. There is no path by which a caller supplies the URL.
+"apps/agent/preflight_agent/tools/parallel_search.py" = ["S310"]

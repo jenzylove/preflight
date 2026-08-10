@@ -24,6 +24,7 @@ class Result(str, Enum):
     UNSUPPORTED = "UNSUPPORTED"            # fails, needs work Preflight will not do
     AMBIGUOUS = "AMBIGUOUS"                # sources disagree, or confidence too low
     NOT_MEASURED = "NOT_MEASURED"          # the property was never measured
+    NOT_APPLICABLE = "NOT_APPLICABLE"      # conditional rule, out of scope for this asset
 
 
 #: Which failures a green (deterministic, non-creative) repair can resolve.
@@ -164,6 +165,13 @@ def evaluate(
             explanation=why,
         )
 
+    if rule.applies_when and not rule.applies_to(measured_properties):
+        scope = ", ".join(f"{k}={v}" for k, v in rule.applies_when.items())
+        return build(
+            Result.NOT_APPLICABLE,
+            why=f"This requirement applies only when {scope}.",
+        )
+
     if rule.rule_id in ambiguous_rule_ids:
         return build(Result.AMBIGUOUS, why="Official sources disagree on this requirement.")
 
@@ -295,7 +303,14 @@ def find_conflicts(packs: list[RulePack]) -> list[dict[str, Any]]:
 
 
 def _mutually_exclusive(a: Rule, b: Rule) -> bool:
-    """True when no single value can satisfy both rules."""
+    """True when no single value can satisfy both rules.
+
+    Rules scoped to different conditions never conflict: '20-30 Mbps at
+    FullHD' and '90-120 Mbps at 4K' are two requirements, not a contradiction.
+    """
+    if a.condition_key() != b.condition_key():
+        return False
+
     ra, rb = _numeric_range(a), _numeric_range(b)
     if ra and rb:
         return ra[1] < rb[0] or rb[1] < ra[0]
@@ -305,6 +320,13 @@ def _mutually_exclusive(a: Rule, b: Rule) -> bool:
     if a.operator is Operator.EQ and b.operator is Operator.EQ:
         return _norm(a.value) != _norm(b.value)
     return False
+
+
+#: Public names for the two predicates the agent's reconciliation needs. Kept
+#: as thin aliases so there is exactly one implementation of "what does this
+#: rule say" and "can these two rules both hold".
+describe_rule = _describe
+mutually_exclusive = _mutually_exclusive
 
 
 def _numeric_range(rule: Rule) -> tuple[float, float] | None:

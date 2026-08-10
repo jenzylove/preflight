@@ -29,8 +29,13 @@ jobs:
       - name: lint
         run: ruff check .
 
+      # The agent tests run offline by design. They exercise tier
+      # classification, injection detection and reconciliation without calling
+      # a model, because those guarantees must hold deterministically — a
+      # security property that only holds when a provider is reachable is not
+      # a security property.
       - name: test
-        run: pytest packages/contracts/tests apps/api/tests
+        run: pytest packages/contracts/tests apps/api/tests apps/agent/tests
 
       # The schema carries invariants (a package cannot be VERIFIED without a
       # hash, a manifest and output-side validation). If it stops compiling to
