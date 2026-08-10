@@ -5,6 +5,12 @@ venv/
 .env
 .env.*
 !.env.example
+
+# Service account keys. Never committed, under any circumstances.
+.secrets/
+*-sa.json
+*credentials*.json
+*service-account*.json
 node_modules/
 .next/
 dist/
