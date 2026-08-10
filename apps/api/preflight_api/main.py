@@ -18,6 +18,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from .assets.router import router as assets_router
 from .core.config import get_settings
 from .core.db import configure_sessions
+from .preflight.router import router as preflight_router
 from .projects.router import router as projects_router
 
 logger = logging.getLogger("preflight")
@@ -57,6 +58,7 @@ app = FastAPI(
 
 app.include_router(projects_router)
 app.include_router(assets_router)
+app.include_router(preflight_router)
 
 
 @app.get("/health/live", tags=["ops"])
