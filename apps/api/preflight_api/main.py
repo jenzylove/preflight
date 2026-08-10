@@ -15,7 +15,10 @@ from fastapi import FastAPI, Response, status
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
+from .assets.router import router as assets_router
 from .core.config import get_settings
+from .core.db import configure_sessions
+from .projects.router import router as projects_router
 
 logger = logging.getLogger("preflight")
 
@@ -33,6 +36,7 @@ async def lifespan(app: FastAPI):
             ", ".join(missing),
         )
     app.state.engine = create_engine(settings.database_url, pool_pre_ping=True, pool_size=5)
+    configure_sessions(app.state.engine)
     try:
         yield
     finally:
@@ -49,6 +53,10 @@ app = FastAPI(
     ),
     lifespan=lifespan,
 )
+
+
+app.include_router(projects_router)
+app.include_router(assets_router)
 
 
 @app.get("/health/live", tags=["ops"])
