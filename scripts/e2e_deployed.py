@@ -13,6 +13,7 @@ services actually returned.
 
 from __future__ import annotations
 
+import http.client
 import json
 import sys
 import time
@@ -53,20 +54,31 @@ def request(
     headers = {"Content-Type": content_type}
     if token:
         headers["Authorization"] = f"Bearer {token}"
-    req = urllib.request.Request(url, data=data, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310  # https only
-            text = r.read().decode("utf-8", "replace")
-            try:
-                return r.status, json.loads(text)
-            except json.JSONDecodeError:
-                return r.status, text
-    except urllib.error.HTTPError as e:
-        text = e.read().decode("utf-8", "replace")
+    # A dropped socket is a fact about the network, not about the service.
+    # Retrying transport failures keeps the report about the product; HTTP
+    # errors are answers and are never retried.
+    last: Exception | None = None
+    for attempt in range(3):
+        req = urllib.request.Request(url, data=data, headers=headers, method=method)
         try:
-            return e.code, json.loads(text)
-        except json.JSONDecodeError:
-            return e.code, text
+            with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
+                text = r.read().decode("utf-8", "replace")
+                try:
+                    return r.status, json.loads(text)
+                except json.JSONDecodeError:
+                    return r.status, text
+        except urllib.error.HTTPError as e:
+            text = e.read().decode("utf-8", "replace")
+            try:
+                return e.code, json.loads(text)
+            except json.JSONDecodeError:
+                return e.code, text
+        except (TimeoutError, urllib.error.URLError, http.client.HTTPException,
+                ConnectionError, OSError) as e:
+            last = e
+            time.sleep(2 * (attempt + 1))
+
+    return 0, f"transport failure after retries: {last}"
 
 
 def sign_up(api_key: str) -> str:
