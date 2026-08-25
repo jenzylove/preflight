@@ -19,16 +19,21 @@ Parallel track.
 
 ## Status
 
-**Gate 0 complete.** The central transaction is proven end to end with scripts
-only, against two real destinations and one deliberately malformed fixture. No
-interface has been built yet — that was the point.
+Gates 0 through 6 complete: the transaction is proven, the schema and state
+machines enforce the safety properties, retrieval and extraction run live
+against real destinations, and the worker, validator, passports and delivery
+rooms are built and tested.
+
+Measured, not asserted:
 
 ```
-9 mismatches detected against real published rules
-4 repaired by deterministic operations
-original asset sha256 unchanged
-decoded picture bit-identical before and after metadata repair
-1 irreconcilable cross-destination conflict found and cited
+mean extraction recall vs. human transcription   96%
+requirement mismatches found on a real fixture    9
+repaired by deterministic operations              4
+original asset sha256                             unchanged
+decoded picture through metadata repair           bit-identical
+cross-destination conflicts found and cited       1 (hard)
+tests                                           141
 ```
 
 Reproduce it:
@@ -37,10 +42,12 @@ Reproduce it:
 python scripts/gate0/make_fixture.py     # synthesise the malformed master
 python scripts/gate0/run_spike.py        # measure, compare, repair, re-measure
 python scripts/gate0/check_conflicts.py  # prove the destinations really conflict
-cd packages/contracts && python -m pytest tests -q
+python scripts/gate3/run_extraction.py   # live retrieval + extraction, scored
+python -m pytest -q
 ```
 
-Requires `ffmpeg` and `ffprobe` on PATH, plus `pillow` and `pytest`.
+The first three need `ffmpeg` and `ffprobe` on PATH. The fourth needs
+`PARALLEL_API_KEY` and a Google Cloud project in `.env` — see `.env.example`.
 
 ---
 
@@ -105,14 +112,27 @@ quietly.
 Gate 0 uses two destinations whose requirements are published publicly, in
 concrete values, and which genuinely conflict:
 
-- **YouTube** — `support.google.com/youtube/answer/1722171`
+- **Berlinale** — `berlinale.de/en/film-entry/technical-specifications/festival-media.html`
 - **Artdocfest** — `artdocfest.com/en/content/technical-requirements/`
 
-Netflix was evaluated and rejected: its delivery specifications require partner
-login, and the publicly reachable QC page states no numeric values. That is a
-real constraint on the product, not a demo inconvenience, and it is why
-user-supplied private specifications are a first-class path rather than a
-fallback. See [docs/destinations.md](docs/destinations.md).
+They conflict in a way that cannot be reconciled: the Berlinale mandates
+burned-in subtitles and explicitly rejects sidecar files, while Artdocfest
+mandates SubRip and forbids burned-in subtitles. Preflight quotes each
+destination's own sentence and builds a separate version for each.
+
+Two destinations were evaluated and rejected, for reasons that shape the
+product rather than the demo:
+
+- **Netflix** publishes its delivery specifications behind partner login.
+- **YouTube** publishes its encoding specification through script. The page is
+  public and authoritative, but extracting it returns 4 KB of prose containing
+  no bitrate, frame rate or aspect ratio at all.
+
+A destination whose requirements cannot be read is a real limit. Preflight
+scores the machine-readability of what it retrieves and says so, and the answer
+for those destinations is the private-specification path: the user supplies the
+document they already have, it is marked private, and it never reaches a
+retrieval provider. See [docs/destinations.md](docs/destinations.md).
 
 ---
 

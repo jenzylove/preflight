@@ -1,0 +1,20 @@
+# Builds the isolated media worker. This image carries ffmpeg and is the only
+# one that ever touches customer media, which is why it is built and deployed
+# separately from the API.
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - --file=apps/worker/Dockerfile
+      - --tag=us-central1-docker.pkg.dev/$PROJECT_ID/preflight/worker:$_TAG
+      - --tag=us-central1-docker.pkg.dev/$PROJECT_ID/preflight/worker:latest
+      - .
+images:
+  - us-central1-docker.pkg.dev/$PROJECT_ID/preflight/worker:$_TAG
+  - us-central1-docker.pkg.dev/$PROJECT_ID/preflight/worker:latest
+substitutions:
+  _TAG: v1
+options:
+  machineType: E2_HIGHCPU_8
+  logging: CLOUD_LOGGING_ONLY
+timeout: 1200s
