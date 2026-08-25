@@ -120,6 +120,77 @@ export const api = {
     call<Asset>(`/v1/projects/${projectId}/assets/${assetId}/complete`, {
       method: "POST",
     }),
+
+  listDestinations: () => call<Destination[]>("/v1/destinations"),
+
+  getSelectedDestinations: (projectId: string) =>
+    call<{ selected: Destination[]; project_state: string }>(
+      `/v1/projects/${projectId}/destinations`,
+    ),
+
+  setDestinations: (projectId: string, destinationIds: string[]) =>
+    call<{ selected: Destination[]; project_state: string }>(
+      `/v1/projects/${projectId}/destinations`,
+      { method: "PUT", body: JSON.stringify({ destination_ids: destinationIds }) },
+    ),
+
+  runPreflight: (projectId: string) =>
+    call<PreflightRun>(`/v1/projects/${projectId}/preflight`, { method: "POST" }),
+
+  latestPreflight: (projectId: string) =>
+    call<PreflightRun>(`/v1/projects/${projectId}/preflight/latest`),
+
+  approvePlan: (projectId: string, planId: string, stepIds: string[]) =>
+    call<{ plan_digest: string; approved_steps: number; note: string }>(
+      `/v1/projects/${projectId}/repair-plans/${planId}/approve`,
+      { method: "POST", body: JSON.stringify({ step_ids: stepIds }) },
+    ),
+
+  executePlan: (projectId: string, planId: string) =>
+    call<{ job_id: string; state: string; steps_queued: number; message: string }>(
+      `/v1/projects/${projectId}/repair-plans/${planId}/execute`,
+      { method: "POST" },
+    ),
+
+  jobStatus: (projectId: string, jobId: string) =>
+    call<JobStatus>(`/v1/projects/${projectId}/jobs/${jobId}`),
+
+  listPackages: (projectId: string) =>
+    call<PackageSummary[]>(`/v1/projects/${projectId}/packages`),
+
+  packageDownload: (projectId: string, packageId: string) =>
+    call<{ url: string; expires_in_seconds: number; sha256: string | null }>(
+      `/v1/projects/${projectId}/packages/${packageId}/download-intent`,
+      { method: "POST" },
+    ),
+
+  getPassport: (projectId: string) =>
+    call<{
+      version: number;
+      digest: string;
+      issued_at: string;
+      passport: Record<string, unknown>;
+      report: string;
+    }>(`/v1/projects/${projectId}/passport`),
+
+  listRooms: (projectId: string) =>
+    call<DeliveryRoom[]>(`/v1/projects/${projectId}/delivery-rooms`),
+
+  createRoom: (
+    projectId: string,
+    packageId: string,
+    body: { recipient_label?: string; expires_in_hours?: number },
+  ) =>
+    call<DeliveryRoom>(
+      `/v1/projects/${projectId}/packages/${packageId}/delivery-rooms`,
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+
+  revokeRoom: (projectId: string, roomId: string) =>
+    call<{ state: string; note: string }>(
+      `/v1/projects/${projectId}/delivery-rooms/${roomId}`,
+      { method: "DELETE" },
+    ),
 };
 
 /**
@@ -148,4 +219,127 @@ export async function uploadToSignedUrl(
 
     xhr.send(file);
   });
+}
+
+// ---------------------------------------------------------------------------
+// Destinations, preflight, plan, packages, passport, delivery
+// ---------------------------------------------------------------------------
+
+export interface DestinationSource {
+  url: string | null;
+  retrieved_at: string;
+  trust_tier: string;
+  excerpt: string;
+}
+
+export interface Destination {
+  id: string;
+  slug: string;
+  name: string;
+  official_domain: string | null;
+  requires_private_spec: boolean;
+  available: boolean;
+  rule_pack_id: string | null;
+  rule_pack_version: number | null;
+  rule_pack_digest: string | null;
+  mandatory_rules: number;
+  total_rules: number;
+  sources: DestinationSource[];
+  unavailable_reason: string | null;
+}
+
+export interface PlanStep {
+  step_id: string;
+  operation: string;
+  safety: "green" | "yellow" | "red";
+  destination_id: string;
+  input_role: string;
+  output_role: string;
+  parameters: Record<string, unknown>;
+  explains: string;
+  executable: boolean;
+  resolves: string[];
+}
+
+export interface RepairPlan {
+  plan_id: string | null;
+  digest: string;
+  steps: PlanStep[];
+  blocked: Record<string, unknown>[];
+  unresolved: Record<string, unknown>[];
+  preserved_assets: string[];
+  estimated_seconds: number;
+  shared_across_destinations: Record<string, string[]>;
+}
+
+export interface PreflightRun {
+  run_id: string;
+  comparison_digest: string;
+  destinations: {
+    destination_id: string;
+    rule_pack_digest: string;
+    satisfied: number;
+    total: number;
+    ready: boolean;
+    blocking: string[];
+    assertions: {
+      rule_id: string;
+      asset_type: string;
+      field: string;
+      published: string;
+      measured: string | number | boolean | null;
+      result: string;
+      severity: string;
+      source_url?: string | null;
+      source_excerpt?: string | null;
+      retrieved_at?: string | null;
+      repair_operation?: string | null;
+      explanation?: string;
+    }[];
+  }[];
+  conflicts: Record<string, unknown>[];
+  plan: RepairPlan;
+  limitations: string[];
+}
+
+export interface JobStatus {
+  job_id: string;
+  type: string;
+  state: string;
+  attempt: number;
+  error: string | null;
+  message: string;
+}
+
+export interface PackageSummary {
+  id: string;
+  destination_id: string;
+  destination_name: string;
+  state: string;
+  verified: boolean;
+  package_sha256: string | null;
+  rule_pack_version: number | null;
+  rule_pack_digest: string | null;
+  requirements_satisfied: string;
+  files: { path: string; sha256: string }[];
+  transformations: {
+    operation: string;
+    parameters: Record<string, unknown>;
+    input_sha256: string | null;
+    output_sha256: string | null;
+    picture_preserved: boolean | null;
+  }[];
+  limitations: string[];
+  validator_version: string | null;
+  created_at: string;
+}
+
+export interface DeliveryRoom {
+  room_id: string;
+  url_token: string | null;
+  recipient_label: string | null;
+  expires_at: string;
+  revoked_at: string | null;
+  state: string;
+  note: string;
 }

@@ -109,6 +109,10 @@ def load_env() -> dict[str, str]:
 
 
 def upsert_destination(session: Session, spec: dict) -> Destination:
+    # Flush before deciding, so a destination added earlier in this same
+    # transaction is visible. Without it a re-run inserts a duplicate slug and
+    # dies on the unique constraint instead of updating what is already there.
+    session.flush()
     row = session.scalar(select(Destination).where(Destination.slug == spec["slug"]))
     if row is None:
         row = Destination(slug=spec["slug"], name=spec["name"])
@@ -227,12 +231,114 @@ def seed_one(session: Session, spec: dict, api_key: str, client, model: str) -> 
           f"({len(mandatory)} mandatory), {len(result.rejected)} rejected by schema")
 
 
+def seed_from_report(session: Session, spec: dict, path: Path) -> None:
+    """Persist a rule pack produced by an earlier real retrieval run.
+
+    The JSON in out/gate3 is the output of the same pipeline seed_one runs -
+    Parallel Search, Parallel Extract, Gemini, and the contract layer that
+    rejects what the schema or the source tier does not support. Loading it is
+    not a substitute for retrieval; it is the retrieval, persisted, and it
+    keeps a redeploy from re-paying two providers for an answer already on disk.
+
+    Every rule still arrives with its source URL, quoted excerpt, retrieval
+    timestamp and trust tier. Nothing is reconstructed or filled in.
+    """
+    import json
+
+    destination = upsert_destination(session, spec)
+    data = json.loads(path.read_text(encoding="utf-8"))
+
+    evidence_rows: dict[str, SourceEvidenceRow] = {}
+    for ev in data.get("evidence", []):
+        tier = ev.get("trust_tier", "D")
+        tier = tier.split(".")[-1] if "." in str(tier) else tier
+        tier = {"OFFICIAL": "A", "PRIVATE_SPEC": "B",
+                "REFERENCED_STD": "C", "UNVERIFIED": "D"}.get(tier, tier)
+        row = SourceEvidenceRow(
+            destination_id=destination.id,
+            owner_id=None,
+            source_type="retrieved",
+            url=ev.get("url") or None,
+            retrieved_at=datetime.fromisoformat(ev["retrieved_at"]),
+            source_hash=ev["source_hash"],
+            quoted_excerpt=ev["quoted_excerpt"],
+            trust_tier=tier,
+            private=bool(ev.get("private")),
+        )
+        session.add(row)
+        session.flush()
+        evidence_rows[ev["evidence_id"]] = row
+
+    version = next_version(session, destination.id)
+    pack_row = RulePackRow(
+        destination_id=destination.id,
+        owner_id=None,
+        version=version,
+        status=CONFIRMED,
+        schema_version=data.get("schemaVersion", SCHEMA_VERSION),
+        digest=data["digest"],
+        extraction_model="gemini-2.5-pro",
+        prompt_version="2026-08-10.1",
+    )
+    session.add(pack_row)
+    session.flush()
+
+    kept = 0
+    for rule in data.get("rules", []):
+        evidence_row = evidence_rows.get(rule.get("source_evidence_id"))
+        if evidence_row is None:
+            continue   # a rule without evidence cannot exist
+        severity = str(rule["severity"]).split(".")[-1].lower()
+        confidence = str(rule["confidence"]).split(".")[-1].lower()
+        asset_type = str(rule["asset_type"]).split(".")[-1].lower()
+        operator = str(rule["operator"]).split(".")[-1].lower()
+        session.add(RuleRow(
+            rule_pack_id=pack_row.id,
+            asset_type=asset_type,
+            field=rule["field_name"],
+            operator=operator,
+            expected_value_json=rule["value"],
+            severity=severity,
+            source_evidence_id=evidence_row.id,
+            confidence=confidence,
+            note=rule.get("note") or None,
+        ))
+        kept += 1
+
+    session.flush()
+    print(f"  {spec['name']}: v{version} {data['digest']} - {kept} rules from "
+          f"{path.name}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--database-url", default=os.environ.get("DATABASE_URL"))
+    parser.add_argument(
+        "--from-report", action="store_true",
+        help="persist rule packs from a previous real retrieval run in out/gate3",
+    )
     args = parser.parse_args()
     if not args.database_url:
         raise SystemExit("--database-url or DATABASE_URL is required")
+
+    engine_url = args.database_url
+
+    if args.from_report:
+        engine = create_engine(engine_url)
+        with Session(engine) as session:
+            for spec in DESTINATIONS:
+                if spec.get("requires_private_spec"):
+                    upsert_destination(session, spec)
+                    print(f"  {spec['name']}: recorded as unreadable - {spec['reason']}")
+                    continue
+                report = ROOT / "out" / "gate3" / f"{spec['slug']}_extracted.json"
+                if not report.exists():
+                    print(f"  {spec['name']}: no retrieval output at {report}")
+                    continue
+                seed_from_report(session, spec, report)
+            session.commit()
+        print("done")
+        return 0
 
     env = load_env()
     api_key = env.get("PARALLEL_API_KEY", "")

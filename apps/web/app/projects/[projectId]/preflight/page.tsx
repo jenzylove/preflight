@@ -1,87 +1,265 @@
+"use client";
+
+import Link from "next/link";
+import { use, useCallback, useEffect, useState } from "react";
+
+import { Shell } from "@/components/Shell";
 import { StatusBadge } from "@/components/StatusBadge";
-import type { Assertion, Conflict, DestinationMatrix, PreflightRun } from "@/lib/types";
+import { api, type PreflightRun } from "@/lib/api";
+import type { AssertionResult } from "@/lib/types";
 
 /**
  * The compatibility matrix.
  *
- * Design rules this page follows, taken from the product principles:
- *  - every status links to the evidence behind it, so nothing is taken on trust;
- *  - measured values sit beside published ones rather than being collapsed into
- *    a verdict;
+ * Rules this page follows, from the product principles:
+ *  - every status links to the evidence behind it;
+ *  - measured values sit beside published ones rather than being collapsed
+ *    into a verdict;
  *  - the word "compliant" never appears. Readiness is stated as meeting
  *    published requirements, with the retrieval date attached.
  */
-
-async function getRun(projectId: string): Promise<PreflightRun | null> {
-  const base = process.env.NEXT_PUBLIC_API_BASE_URL;
-  if (!base) return null;
-  const res = await fetch(`${base}/v1/projects/${projectId}/preflight/latest`, {
-    cache: "no-store",
-  });
-  if (!res.ok) return null;
-  return res.json();
+export default function PreflightPage({
+  params,
+}: {
+  params: Promise<{ projectId: string }>;
+}) {
+  const { projectId } = use(params);
+  return (
+    <Shell>
+      <Matrix projectId={projectId} />
+    </Shell>
+  );
 }
 
-function Evidence({ assertion }: { assertion: Assertion }) {
-  if (!assertion.sourceUrl) return null;
+function Matrix({ projectId }: { projectId: string }) {
+  const [run, setRun] = useState<PreflightRun | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setRun(await api.latestPreflight(projectId));
+    } catch {
+      /* none yet — the user runs one below */
+    } finally {
+      setLoaded(true);
+    }
+  }, [projectId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function runNow() {
+    setBusy(true);
+    setError("");
+    try {
+      setRun(await api.runPreflight(projectId));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Preflight could not run.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!loaded) {
+    return (
+      <main className="mx-auto max-w-4xl px-6 py-12">
+        <p className="text-neutral-500">Loading…</p>
+      </main>
+    );
+  }
+
   return (
-    <details className="mt-2 text-xs text-neutral-400">
-      <summary className="cursor-pointer text-neutral-500 hover:text-neutral-300">
-        Where this requirement comes from
-      </summary>
-      <div className="mt-2 border-l-2 border-neutral-800 pl-3">
-        {assertion.sourceExcerpt && (
-          <p className="italic text-neutral-300">{assertion.sourceExcerpt}</p>
-        )}
-        <a
-          href={assertion.sourceUrl}
-          target="_blank"
-          rel="noreferrer noopener"
-          className="mt-1 inline-block break-all text-sky-400 underline underline-offset-2"
+    <main className="mx-auto max-w-4xl px-6 py-10">
+      <h1 className="text-2xl font-semibold text-neutral-100">
+        What each destination requires
+      </h1>
+      <p className="mt-2 max-w-2xl text-sm text-neutral-400">
+        Every requirement below was retrieved from the destination&apos;s own published
+        documentation. Every measurement was taken from your files by ffprobe, ffmpeg
+        and Pillow. Nothing here is inferred.
+      </p>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <button
+          onClick={runNow}
+          disabled={busy}
+          className="rounded bg-neutral-100 px-5 py-2 font-medium text-neutral-950
+                     transition hover:bg-white disabled:opacity-50"
         >
-          {assertion.sourceUrl}
-        </a>
-        {assertion.retrievedAt && (
-          <p className="mt-1 text-neutral-500">Retrieved {assertion.retrievedAt}</p>
+          {busy ? "Measuring…" : run ? "Run preflight again" : "Run preflight"}
+        </button>
+        {run && (
+          <span className="font-mono text-xs text-neutral-600">
+            comparison digest {run.comparison_digest}
+          </span>
         )}
       </div>
-    </details>
-  );
-}
 
-function AssertionRow({ assertion }: { assertion: Assertion }) {
-  return (
-    <li className="border-b border-neutral-900 py-3 last:border-0">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <span className="font-mono text-sm text-neutral-200">
-          {assertion.assetType}.{assertion.field}
-        </span>
-        <StatusBadge result={assertion.result} />
-      </div>
-
-      <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-        <div>
-          <dt className="inline text-neutral-500">Published: </dt>
-          <dd className="inline text-neutral-300">{assertion.published}</dd>
-        </div>
-        <div>
-          <dt className="inline text-neutral-500">Your file: </dt>
-          <dd className="inline font-medium text-neutral-100">
-            {assertion.measured === null ? "not measured" : String(assertion.measured)}
-          </dd>
-        </div>
-      </dl>
-
-      {assertion.explanation && (
-        <p className="mt-1.5 text-sm text-neutral-400">{assertion.explanation}</p>
+      {error && (
+        <p role="alert" className="mt-5 text-sm text-rose-400">
+          {error}
+        </p>
       )}
-      <Evidence assertion={assertion} />
-    </li>
+
+      {!run && !error && (
+        <p className="mt-8 text-sm text-neutral-400">
+          No preflight has been run yet. Add your files and choose destinations, then
+          run it.
+        </p>
+      )}
+
+      {run && (
+        <>
+          {run.conflicts.length > 0 && (
+            <div className="mt-8 space-y-3">
+              <h2 className="text-sm font-medium uppercase tracking-wide text-neutral-500">
+                Before anything else
+              </h2>
+              {run.conflicts.map((c, i) => (
+                <ConflictCard key={i} conflict={c} />
+              ))}
+            </div>
+          )}
+
+          <div className="mt-8 space-y-6">
+            {run.destinations.map((d) => {
+              const failing = d.assertions.filter((a) => a.result !== "PASS");
+              return (
+                <section
+                  key={d.destination_id}
+                  className="rounded-lg border border-neutral-800 bg-neutral-950 p-5"
+                >
+                  <header className="flex flex-wrap items-baseline justify-between gap-2">
+                    <h2 className="text-lg font-medium text-neutral-100">
+                      {d.destination_id}
+                    </h2>
+                    <p className="text-sm text-neutral-400">
+                      {d.satisfied} of {d.total} requirements met
+                    </p>
+                  </header>
+                  <p className="mt-1 font-mono text-xs text-neutral-600">
+                    rule pack {d.rule_pack_digest}
+                  </p>
+                  <p className="mt-3 text-sm">
+                    {d.ready ? (
+                      <span className="text-emerald-300">
+                        Meets every published requirement Preflight could check.
+                      </span>
+                    ) : (
+                      <span className="text-amber-300">
+                        Not ready — {d.blocking.length} mandatory requirement
+                        {d.blocking.length === 1 ? "" : "s"} outstanding.
+                      </span>
+                    )}
+                  </p>
+
+                  <ul className="mt-4">
+                    {failing.map((a) => (
+                      <li
+                        key={a.rule_id}
+                        className="border-b border-neutral-900 py-3 last:border-0"
+                      >
+                        <div className="flex flex-wrap items-baseline justify-between gap-2">
+                          <span className="font-mono text-sm text-neutral-200">
+                            {a.asset_type}.{a.field}
+                          </span>
+                          <StatusBadge result={a.result as AssertionResult} />
+                        </div>
+                        <dl className="mt-2 grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
+                          <div>
+                            <dt className="inline text-neutral-500">Published: </dt>
+                            <dd className="inline text-neutral-300">{a.published}</dd>
+                          </div>
+                          <div>
+                            <dt className="inline text-neutral-500">Your file: </dt>
+                            <dd className="inline font-medium text-neutral-100">
+                              {a.measured === null ? "not measured" : String(a.measured)}
+                            </dd>
+                          </div>
+                        </dl>
+                        {a.explanation && (
+                          <p className="mt-1.5 text-sm text-neutral-400">
+                            {a.explanation}
+                          </p>
+                        )}
+                        {a.source_url && (
+                          <details className="mt-2 text-xs text-neutral-400">
+                            <summary className="cursor-pointer text-neutral-500 hover:text-neutral-300">
+                              Where this requirement comes from
+                            </summary>
+                            <div className="mt-2 border-l-2 border-neutral-800 pl-3">
+                              {a.source_excerpt && (
+                                <p className="italic text-neutral-300">
+                                  {a.source_excerpt}
+                                </p>
+                              )}
+                              <a
+                                href={a.source_url}
+                                target="_blank"
+                                rel="noreferrer noopener"
+                                className="mt-1 inline-block break-all text-sky-400 underline"
+                              >
+                                {a.source_url}
+                              </a>
+                              {a.retrieved_at && (
+                                <p className="mt-1 text-neutral-500">
+                                  Retrieved {a.retrieved_at}
+                                </p>
+                              )}
+                            </div>
+                          </details>
+                        )}
+                      </li>
+                    ))}
+                  </ul>
+
+                  {failing.length === 0 && (
+                    <p className="mt-4 text-sm text-neutral-400">Nothing outstanding.</p>
+                  )}
+                </section>
+              );
+            })}
+          </div>
+
+          {run.limitations.length > 0 && (
+            <section className="mt-8 rounded-lg border border-neutral-800 p-4">
+              <h2 className="text-sm font-medium text-neutral-300">
+                What Preflight could not settle
+              </h2>
+              <ul className="mt-2 space-y-1 text-sm text-neutral-400">
+                {run.limitations.map((l, i) => (
+                  <li key={i}>{l}</li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <Link
+            href={`/projects/${projectId}/plan`}
+            className="mt-8 inline-block rounded bg-neutral-100 px-5 py-2 font-medium
+                       text-neutral-950 transition hover:bg-white"
+          >
+            Review the repair plan
+          </Link>
+        </>
+      )}
+
+      <p className="mt-10 border-t border-neutral-900 pt-6 text-sm text-neutral-500">
+        Preflight checks your files against what each destination publishes. It cannot
+        promise that a festival or platform will accept your delivery.
+      </p>
+    </main>
   );
 }
 
-function ConflictCard({ conflict }: { conflict: Conflict }) {
+function ConflictCard({ conflict }: { conflict: Record<string, unknown> }) {
   const hard = conflict.strength === "hard";
+  const destinations = (conflict.destinations as string[]) ?? [];
+  const requirements = (conflict.requirements as string[]) ?? [];
+
   return (
     <div
       className={`rounded-lg border p-4 ${
@@ -93,141 +271,22 @@ function ConflictCard({ conflict }: { conflict: Conflict }) {
           ? "These destinations cannot both be satisfied"
           : "These destinations disagree"}
         <span className="ml-2 font-mono text-xs text-neutral-400">
-          {conflict.assetType}.{conflict.field}
+          {String(conflict.assetType)}.{String(conflict.field)}
         </span>
       </p>
-
-      <ul className="mt-3 space-y-2 text-sm">
-        {conflict.destinations.map((destination, i) => (
-          <li key={destination}>
-            <span className="font-medium text-neutral-200">{destination}</span>
-            <span className="text-neutral-400"> requires {conflict.requirements[i]}</span>
-            {conflict.excerpts?.[i] && (
-              <p className="mt-0.5 border-l-2 border-neutral-800 pl-3 text-xs italic text-neutral-400">
-                {conflict.excerpts[i]}
-              </p>
-            )}
-            {conflict.evidenceUrls?.[i] && (
-              <a
-                href={conflict.evidenceUrls[i]}
-                target="_blank"
-                rel="noreferrer noopener"
-                className="mt-0.5 block break-all pl-3 text-xs text-sky-400 underline"
-              >
-                {conflict.evidenceUrls[i]}
-              </a>
-            )}
+      <ul className="mt-3 space-y-1.5 text-sm">
+        {destinations.map((d, i) => (
+          <li key={d}>
+            <span className="font-medium text-neutral-200">{d}</span>
+            <span className="text-neutral-400"> requires {requirements[i]}</span>
           </li>
         ))}
       </ul>
-
       <p className="mt-3 text-sm text-neutral-400">
         {hard
-          ? "Preflight will build a separate version for each. One file cannot go to both."
+          ? "Preflight builds a separate version for each. One file cannot go to both."
           : "One file can go to both, but one destination gets a result it does not recommend."}
       </p>
     </div>
-  );
-}
-
-function DestinationSection({ matrix }: { matrix: DestinationMatrix }) {
-  const failing = matrix.assertions.filter((a) => a.result !== "PASS");
-  const satisfied = matrix.assertions.length - failing.length;
-
-  return (
-    <section className="rounded-lg border border-neutral-800 bg-neutral-950 p-5">
-      <header className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-lg font-medium text-neutral-100">{matrix.destinationName}</h2>
-        <p className="text-sm text-neutral-400">
-          {satisfied} of {matrix.assertions.length} requirements met
-        </p>
-      </header>
-
-      <p className="mt-1 text-xs text-neutral-500">
-        Rule pack v{matrix.rulePackVersion} · {matrix.rulePackDigest}
-      </p>
-
-      <p className="mt-3 text-sm">
-        {matrix.ready ? (
-          <span className="text-emerald-300">
-            Meets every published requirement Preflight could check.
-          </span>
-        ) : (
-          <span className="text-amber-300">
-            Not ready — {failing.length} requirement{failing.length === 1 ? "" : "s"}{" "}
-            outstanding.
-          </span>
-        )}
-      </p>
-
-      <ul className="mt-4">
-        {failing.map((a) => (
-          <AssertionRow key={`${matrix.destinationId}-${a.ruleId}`} assertion={a} />
-        ))}
-      </ul>
-
-      {failing.length === 0 && (
-        <p className="mt-4 text-sm text-neutral-400">Nothing outstanding.</p>
-      )}
-    </section>
-  );
-}
-
-export default async function PreflightPage({
-  params,
-}: {
-  params: Promise<{ projectId: string }>;
-}) {
-  const { projectId } = await params;
-  const run = await getRun(projectId);
-
-  if (!run) {
-    return (
-      <main className="mx-auto max-w-3xl px-6 py-16">
-        <h1 className="text-2xl font-semibold text-neutral-100">Preflight</h1>
-        <p className="mt-4 text-neutral-400">
-          No preflight has been run for this project yet. Add your master and choose
-          destinations first.
-        </p>
-      </main>
-    );
-  }
-
-  return (
-    <main className="mx-auto max-w-4xl px-6 py-12">
-      <h1 className="text-2xl font-semibold text-neutral-100">
-        What each destination requires
-      </h1>
-      <p className="mt-2 max-w-2xl text-neutral-400">
-        Every requirement below was retrieved from the destination&apos;s own published
-        documentation, and every measurement was taken from your files by ffprobe,
-        ffmpeg and Pillow. Nothing here is inferred.
-      </p>
-      <p className="mt-1 font-mono text-xs text-neutral-600">
-        comparison digest {run.comparisonDigest}
-      </p>
-
-      {run.conflicts.length > 0 && (
-        <div className="mt-8 space-y-3">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-neutral-500">
-            Before anything else
-          </h2>
-          {run.conflicts.map((c) => (
-            <ConflictCard key={`${c.assetType}.${c.field}`} conflict={c} />
-          ))}
-        </div>
-      )}
-
-      <div className="mt-8 space-y-6">
-        {run.destinations.map((m) => (
-          <DestinationSection key={m.destinationId} matrix={m} />
-        ))}
-      </div>
-
-      <p className="mt-10 border-t border-neutral-900 pt-6 text-sm text-neutral-500">
-        Preflight checks your files against what each destination publishes. It cannot
-        promise that a festival or platform will accept your delivery.
-      </p>
-    </main>
   );
 }
