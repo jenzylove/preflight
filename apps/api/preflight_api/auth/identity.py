@@ -28,7 +28,18 @@ NOT_FOUND = HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not fou
 
 
 class TokenVerificationError(Exception):
-    pass
+    """The token itself did not verify."""
+
+
+class MisconfiguredAuthError(Exception):
+    """Authentication could not be completed for reasons that are our fault.
+
+    Kept separate from TokenVerificationError because the two demand opposite
+    responses. A bad token is the caller's problem and gets a terse 401. A
+    misconfigured service account is our problem, and returning 401 for it
+    would tell every user their credentials are wrong while the real cause sits
+    invisible in an IAM policy.
+    """
 
 
 def _verify_firebase_token(token: str, project_id: str) -> dict[str, str]:
@@ -49,6 +60,15 @@ def _verify_firebase_token(token: str, project_id: str) -> dict[str, str]:
 
     try:
         decoded = firebase_auth.verify_id_token(token, check_revoked=True)
+    except firebase_auth.InsufficientPermissionError as exc:
+        # The token may be perfectly valid; the *service account* cannot query
+        # revocation state. Rejecting the user here would be correct-by-accident
+        # and impossible to diagnose, because the rejection looks identical to a
+        # forged token. Fail loudly as a misconfiguration instead.
+        raise MisconfiguredAuthError(
+            "the runtime service account cannot check token revocation; "
+            "it needs roles/firebaseauth.admin"
+        ) from exc
     except Exception as exc:  # noqa: BLE001 - provider raises a wide family
         raise TokenVerificationError(str(exc)) from exc
 
@@ -86,6 +106,13 @@ def current_user(
 
     try:
         claims = _verify_firebase_token(token, settings.firebase_project_id)
+    except MisconfiguredAuthError:
+        logger.exception("authentication is misconfigured")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Sign-in is temporarily unavailable. This is not a problem "
+                   "with your account.",
+        ) from None
     except TokenVerificationError:
         # Logged without the token itself. A rejected token in a log file is
         # still a credential.
