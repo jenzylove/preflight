@@ -33,14 +33,15 @@ def make_master(path: Path) -> None:
     """A 1080p master carrying four separate, real delivery defects.
 
     1. Integrated loudness far too hot for Artdocfest's -18..-21 LUFS window.
-    2. Display aspect ratio flagged 4:3 on a 16:9 raster — the classic metadata
+    2. True peak above Artdocfest's published -3 dBTP ceiling.
+    3. Display aspect ratio flagged 4:3 on a 16:9 raster - the classic metadata
        fault that makes a platform letterbox a film incorrectly.
-    3. moov atom written at the end of the file, so it will not fast-start.
-    4. Colour primaries left unsignalled, so BT.709 cannot be assumed.
+    4. moov atom written at the end of the file, so it will not fast-start.
+    5. Colour primaries left unsignalled, so BT.709 cannot be assumed.
 
-    True peak is deliberately *not* a defect here. A smooth two-tone mix at
-    -12 LUFS simply does not peak above -3 dBTP, and manufacturing a breach
-    would mean building a fixture to flatter the tool rather than to test it.
+    Both audio defects come from one cause - a mix driven far too hot - which
+    is also how they occur in practice, and both are corrected by the single
+    two-pass normalisation Preflight performs.
     """
     run(
         [
@@ -52,13 +53,15 @@ def make_master(path: Path) -> None:
             "-f", "lavfi", "-i",
             f"sine=frequency=277:sample_rate=48000:duration={DURATION}",
             # Drive the mix to a specific, verifiably out-of-spec loudness.
-            # -12 LUFS sits well above Artdocfest's -18..-21 window, and a
-            # -0.5 dBTP ceiling breaches the published -3 dBTP limit. Both
-            # numbers are chosen so the failure is unambiguous when measured,
-            # rather than hovering near a boundary.
+            # The result sits far above Artdocfest's -18..-21 LUFS window and
+            # breaches its -3 dBTP ceiling, so both failures are unambiguous
+            # when measured rather than hovering near a boundary.
             "-filter_complex",
-            "[1:a][2:a]amix=inputs=2:duration=first,"
-            "loudnorm=I=-12:TP=-0.5:LRA=7[a]",
+            # Direct gain rather than loudnorm: loudnorm's own true-peak
+            # limiter refuses to produce a peak-breaching file, which is the
+            # very defect being modelled here. A mix pushed hard with no
+            # limiter is also how this arrives in practice.
+            "[1:a][2:a]amix=inputs=2:duration=first,volume=20dB[a]",
             "-map", "0:v", "-map", "[a]",
             "-c:v", "libx264", "-profile:v", "high", "-preset", "veryfast",
             "-b:v", "8000k", "-pix_fmt", "yuv420p",
@@ -111,7 +114,8 @@ def main() -> None:
     make_poster(FIXTURE_DIR / "poster.jpg")
 
     print("\nfixture ready. Defects are real and measurable, not annotations:")
-    print("  audio loudness      ~-12 LUFS against Artdocfest's -18..-21 window")
+    print("  audio loudness      ~-4 LUFS against Artdocfest's -18..-21 window")
+    print("  audio true peak     above the published -3 dBTP ceiling")
     print("  display aspect      flagged 4:3 on a 16:9 raster")
     print("  fast start          moov atom written after mdat")
     print("  subtitle format     WebVTT where SubRip is mandatory")

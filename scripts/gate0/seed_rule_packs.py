@@ -175,8 +175,79 @@ ARTDOCFEST = RulePack(
 )
 
 
+
+
+# ---------------------------------------------------------------------------
+# Berlinale — berlinale.de/en/film-entry/technical-specifications/festival-media
+#
+# Replaces YouTube as the second Gate 0 destination. YouTube's encoding
+# specification is rendered by script: the page is authoritative and public,
+# but Parallel retrieves only 4 KB of prose from it with no bitrate, frame rate
+# or aspect-ratio values present at all. A destination whose requirements
+# cannot be read is a real constraint on the product, and it is recorded in
+# docs/destinations.md rather than worked around.
+#
+# The Berlinale publishes the same class of requirement as static HTML tables,
+# and is a more honest fit for a film delivery tool than a video platform.
+# ---------------------------------------------------------------------------
+
+BER_URL = (
+    "https://www.berlinale.de/en/film-entry/technical-specifications/"
+    "festival-media.html"
+)
+
+_ber_ev = {
+    "ber_formats": _evidence(
+        "ber_formats", BER_URL,
+        "The approved media formats for the festival and EFM are DCP and "
+        "Quicktime ProRes. 35mm or other formats only upon consultation.",
+    ),
+    "ber_prores": _evidence(
+        "ber_prores", BER_URL,
+        "ProRes. Codec: ProRes, ProRes 444, ProRes HQ. Frame Dimensions: "
+        "HD (1920 x 1080) or 2K (1998 x 1080). Frame rates: 23.98 fps, 24 fps, "
+        "25 fps, 29,97 fps.",
+    ),
+    "ber_subs": _evidence(
+        "ber_subs", BER_URL,
+        "All ProRes subtitles must be “burned-in”. Subtitles delivered as a "
+        "separate file (.sub, .srt, .xml) will not be accepted.",
+    ),
+    "ber_dcp": _evidence(
+        "ber_dcp", BER_URL,
+        "DCP. Image resolution: 2K or 4K. Encoding: JPEG 2000 (variable bitrate "
+        "preferred). Bitrate: ≤ 250 MBit/s. Frame rates: 24 fps, 25 fps, 30 fps.",
+    ),
+}
+
+BERLINALE = RulePack(
+    destination_id="berlinale",
+    version=1,
+    evidence=_ber_ev,
+    rules=[
+        _rule("ber-1", AssetType.VIDEO, "container", Operator.IN, ["mov", "mxf"],
+              "ber_formats",
+              note="QuickTime ProRes or DCP; MP4 is not an approved delivery format"),
+        _rule("ber-2", AssetType.VIDEO, "codec", Operator.IN,
+              ["prores", "prores_444", "prores_hq"], "ber_prores"),
+        _rule("ber-3", AssetType.VIDEO, "widthPx", Operator.IN, [1920, 1998], "ber_prores"),
+        _rule("ber-4", AssetType.VIDEO, "heightPx", Operator.EQ, 1080, "ber_prores"),
+        _rule("ber-5", AssetType.VIDEO, "frameRate", Operator.IN,
+              [23.98, 24, 25, 29.97], "ber_prores"),
+        # The requirement that produces the hard conflict with Artdocfest.
+        _rule("ber-6", AssetType.SUBTITLE, "burnedIn", Operator.EQ, True, "ber_subs",
+              note="mandatory for ProRes delivery"),
+        _rule("ber-7", AssetType.SUBTITLE, "format", Operator.NOT_IN,
+              ["srt", "sub", "xml"], "ber_subs",
+              note="sidecar subtitle files are explicitly not accepted"),
+        _rule("ber-8", AssetType.VIDEO, "bitrateBps", Operator.LTE, 250_000_000,
+              "ber_dcp", note="DCP delivery path"),
+    ],
+)
+
+
 GROUND_TRUTH: dict[str, RulePack] = {
-    "youtube": YOUTUBE,
+    "berlinale": BERLINALE,
     "artdocfest": ARTDOCFEST,
 }
 

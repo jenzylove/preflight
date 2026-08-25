@@ -340,3 +340,36 @@ def _numeric_range(rule: Rule) -> tuple[float, float] | None:
     if rule.operator is Operator.EQ and isinstance(rule.value, (int, float)):
         return float(rule.value), float(rule.value)
     return None
+
+
+def rules_equivalent(a: Rule, b: Rule) -> bool:
+    """Whether two rules impose the same requirement, however they are worded.
+
+    'eq mp4' and 'one of [mp4]' are the same requirement. So are 'between
+    20 and 30' and a pair of gte/lte bounds. Treating those as disagreements
+    made extraction look wrong when it was right, which is the worst kind of
+    metric: one that punishes correct behaviour.
+    """
+    if a.asset_type is not b.asset_type or a.field_name != b.field_name:
+        return False
+
+    a_set, b_set = _acceptable_set(a), _acceptable_set(b)
+    if a_set is not None and b_set is not None:
+        return a_set == b_set
+
+    a_range, b_range = _numeric_range(a), _numeric_range(b)
+    if a_range and b_range:
+        return a_range == b_range
+
+    if a.operator is b.operator:
+        return _norm(a.value) == _norm(b.value)
+    return False
+
+
+def _acceptable_set(rule: Rule) -> set | None:
+    """The set of values a rule admits, when it admits a finite set."""
+    if rule.operator is Operator.EQ:
+        return {_norm(rule.value)}
+    if rule.operator is Operator.IN:
+        return {_norm(v) for v in rule.value}
+    return None

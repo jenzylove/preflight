@@ -13,6 +13,13 @@ meaningful and disagreement is a real finding rather than a metric artefact.
 
 from __future__ import annotations
 
+import sys as _sys
+
+# Windows consoles default to cp1252. A report that crashes while
+# printing a citation is worse than no report.
+if hasattr(_sys.stdout, "reconfigure"):
+    _sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import json
 import os
 import sys
@@ -26,9 +33,15 @@ from preflight_agent.extract import extract_rules  # noqa: E402
 from preflight_agent.reconcile import build_pack, find_ambiguities  # noqa: E402
 from preflight_agent.tools.parallel_search import (  # noqa: E402
     detect_drift,
+    fetch_full_sources,
+    machine_readability,
     search_destination_requirements,
 )
-from preflight_contracts.compare import describe_rule, find_conflicts  # noqa: E402
+from preflight_contracts.compare import (  # noqa: E402
+    describe_rule,
+    find_conflicts,
+    rules_equivalent,
+)
 from preflight_contracts.rules import Severity  # noqa: E402
 from seed_rule_packs import GROUND_TRUTH  # noqa: E402
 
@@ -36,10 +49,13 @@ OUT = ROOT / "out" / "gate3"
 
 DESTINATIONS = [
     {
-        "id": "youtube",
-        "name": "YouTube video upload",
-        "domains": {"support.google.com", "youtube.com", "google.com"},
-        "queries": ["YouTube recommended upload encoding settings bitrate audio codec"],
+        "id": "berlinale",
+        "name": "Berlinale festival and EFM screening media",
+        "domains": {"berlinale.de"},
+        "queries": [
+            "Berlinale technical specifications festival media DCP ProRes",
+            "Berlinale subtitles burned-in resolution frame rate bitrate",
+        ],
     },
     {
         "id": "artdocfest",
@@ -90,7 +106,7 @@ def score(destination_id: str, extracted) -> dict[str, object]:
     agreed, disagreed = [], []
     for key in matched:
         want, got = truth_fields[key], found_fields[key]
-        if describe_rule(want) == describe_rule(got):
+        if rules_equivalent(want, got):
             agreed.append(key)
         else:
             disagreed.append({
@@ -151,6 +167,16 @@ def main() -> int:
             marker = "  official" if source.trust_tier == "A" else "  unverified"
             print(f"    [{source.trust_tier}]{marker:>13}  {source.host}")
 
+        sources = fetch_full_sources(api_key=api_key, sources=sources)
+
+        thin = [
+            s for s in sources
+            if s.may_create_mandatory_rule and machine_readability(s) < 0.25
+        ]
+        for source in thin:
+            print(f"    note: {source.host} is official but carries little "
+                  f"measurable specification text")
+
         usable = [s for s in sources if s.may_create_mandatory_rule]
         untrusted = [s for s in sources if not s.may_create_mandatory_rule]
 
@@ -175,7 +201,7 @@ def main() -> int:
 
         ambiguities = find_ambiguities(pack.rules, pack.evidence)
         if ambiguities:
-            print(f"\n  {len(ambiguities)} ambiguities — official sources disagree:")
+            print(f"\n  {len(ambiguities)} ambiguities - official sources disagree:")
             for a in ambiguities:
                 print("   ", a.explain().replace("\n", "\n    "))
 
@@ -238,7 +264,7 @@ def main() -> int:
             print("  no change in any previously retrieved source")
         report["drift"] = drift
     else:
-        print("\n  baseline source hashes recorded — drift detection active from "
+        print("\n  baseline source hashes recorded - drift detection active from "
               "the next run")
     previous_path.write_text(json.dumps(current_hashes, indent=2), encoding="utf-8")
 
@@ -290,10 +316,10 @@ def main() -> int:
     print(f"\n  report: {OUT / 'gate3_report.json'}")
 
     if all(checks.values()):
-        print("\n  GATE 3 PASSES — live retrieval and extraction produce cited, "
+        print("\n  GATE 3 PASSES - live retrieval and extraction produce cited, "
               "tier-enforced rules.")
         return 0
-    print("\n  GATE 3 FAILS — extraction is not reliable enough to build on.")
+    print("\n  GATE 3 FAILS - extraction is not reliable enough to build on.")
     return 1
 
 

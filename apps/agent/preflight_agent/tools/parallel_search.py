@@ -214,3 +214,92 @@ _INJECTION_PATTERNS = re.compile(
 
 def looks_like_injection(text: str) -> list[str]:
     return [m.group(0) for m in _INJECTION_PATTERNS.finditer(text)]
+
+
+PARALLEL_EXTRACT_URL = "https://api.parallel.ai/v1beta/extract"
+
+
+def fetch_full_sources(
+    *, api_key: str, sources: list[RetrievedSource], max_urls: int = 10
+) -> list[RetrievedSource]:
+    """Replace search snippets with the full text of each page.
+
+    Search finds the right page; it does not read it. A snippet is chosen for
+    relevance to a query, not for completeness, so a specification table can be
+    entirely absent from results that correctly identify the page containing it.
+    Extracting the page is what turns "we found the spec" into "we read it".
+
+    Sources that cannot be extracted keep their excerpts rather than being
+    dropped — partial evidence with a citation is still better than none, and
+    the rule schema will reject anything that cannot be quoted.
+    """
+    if not sources:
+        return []
+    if not api_key:
+        raise RetrievalError("Parallel is not configured")
+
+    wanted = [s for s in sources if s.may_create_mandatory_rule][:max_urls]
+    if not wanted:
+        return sources
+
+    try:
+        data = _post(
+            PARALLEL_EXTRACT_URL,
+            {"urls": [s.url for s in wanted], "full_content": True},
+            api_key,
+            timeout=300,
+        )
+    except RetrievalError as exc:
+        logger.warning("extraction unavailable, continuing on snippets: %s", exc)
+        return sources
+
+    full_by_url: dict[str, str] = {}
+    for result in data.get("results", []):
+        content = (result.get("full_content") or "").strip()
+        if content:
+            full_by_url[result.get("url", "")] = content
+
+    for error in data.get("errors") or []:
+        logger.info("could not extract %s", (error or {}).get("url", "?"))
+
+    upgraded: list[RetrievedSource] = []
+    for source in sources:
+        content = full_by_url.get(source.url)
+        if not content or len(content) <= len(source.text):
+            upgraded.append(source)
+            continue
+        # The hash follows the text it describes, so drift detection compares
+        # like with like across runs.
+        upgraded.append(
+            RetrievedSource(
+                url=source.url,
+                title=source.title,
+                excerpts=[content],
+                retrieved_at=source.retrieved_at,
+                source_hash=hashlib.sha256(content.encode()).hexdigest(),
+                trust_tier=source.trust_tier,
+                host=source.host,
+            )
+        )
+
+    gained = sum(
+        1 for a, b in zip(sources, upgraded, strict=False) if a.source_hash != b.source_hash
+    )
+    logger.info("extracted full content for %d of %d sources", gained, len(sources))
+    return upgraded
+
+
+def machine_readability(source: RetrievedSource) -> float:
+    """How much of a specification this text plausibly contains.
+
+    Used to warn when an official page yields almost nothing measurable — the
+    page exists and is authoritative, but its requirements are in an image, a
+    PDF, or rendered by script. That is a fact about the destination worth
+    surfacing rather than a silent extraction failure.
+    """
+    terms = (
+        "mbps", "kbps", "lufs", "fps", "frame rate", "resolution", "codec",
+        "bitrate", "bit rate", "khz", "aspect", "subtitle", "1920", "resolution",
+    )
+    lowered = source.text.lower()
+    return sum(1 for t in set(terms) if t in lowered) / len(set(terms))
