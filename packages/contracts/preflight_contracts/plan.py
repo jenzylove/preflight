@@ -264,6 +264,21 @@ def build_plan(
             parameters = _parameters_for(
                 operation, assertion, destination_id, loudness_targets
             )
+
+            if operation == "convert_subtitles" and not parameters.get("targetFormat"):
+                # The requirement is real but states only what is unacceptable.
+                # Converting requires knowing what to convert to.
+                plan.unresolved.append({
+                    "destination": destination_id,
+                    "field": f"{assertion.asset_type.value}.{assertion.field_name}",
+                    "reason": (
+                        f"This destination states which subtitle formats it will not "
+                        f"accept ({assertion.expected}) without naming one it will. "
+                        f"Preflight will not guess a target format."
+                    ),
+                    "needs": "your_decision",
+                })
+                continue
             key = json.dumps(
                 [operation, sorted(parameters.items(), key=str)], sort_keys=True, default=str
             )
@@ -321,6 +336,38 @@ def _yellow_operation(assertion: Assertion) -> str | None:
     return None
 
 
+#: Formats the subtitle converter can actually write.
+_WRITABLE_SUBTITLE_FORMATS = ("srt", "vtt")
+
+
+def _subtitle_target(expected: str) -> str | None:
+    """Work out what format to convert to, or admit that we cannot.
+
+    A requirement stated positively names the target: "eq srt", or "one of
+    srt, vtt" where the first writable option wins. A requirement stated
+    negatively - "not one of srt, sub, xml" - says only what is unacceptable.
+    It cannot name a target, and inventing one from the forbidden list is how a
+    converter ends up asked to write "xml, png, mxf" as if that were a format.
+
+    Returning None means the failure is real but not automatically fixable,
+    which is a better answer than a confident wrong one.
+    """
+    text = expected.strip().lower()
+
+    if text.startswith("not one of") or text.startswith("neq "):
+        return None
+
+    if text.startswith("eq "):
+        candidate = text.removeprefix("eq ").strip()
+        return candidate if candidate in _WRITABLE_SUBTITLE_FORMATS else None
+
+    if text.startswith("one of "):
+        options = [o.strip() for o in text.removeprefix("one of ").split(",")]
+        return next((o for o in options if o in _WRITABLE_SUBTITLE_FORMATS), None)
+
+    return None
+
+
 def _parameters_for(
     operation: str,
     assertion: Assertion,
@@ -338,8 +385,8 @@ def _parameters_for(
         return {"destination": destination_id, "corrects": "display_and_colour_signalling"}
 
     if operation == "convert_subtitles":
-        target = assertion.expected.removeprefix("eq ").strip()
-        return {"targetFormat": target}
+        target = _subtitle_target(assertion.expected)
+        return {"targetFormat": target} if target else {}
 
     if operation == "resize_poster":
         return {"mode": "pad", "destination": destination_id}
