@@ -19,6 +19,7 @@ from fastapi import FastAPI, Response, status
 from pydantic import BaseModel
 
 from .executor import ExecutionRefused, run_job
+from .jobs import JobRefused
 from .validate import VALIDATOR_VERSION, validate_package
 
 logger = logging.getLogger("preflight.worker.server")
@@ -49,7 +50,7 @@ def run(payload: RunJob, response: Response) -> dict[str, object]:
 
     try:
         outcome = _process(payload)
-    except ExecutionRefused as exc:
+    except (ExecutionRefused, JobRefused) as exc:
         # A refusal is a decision, not a fault. Retrying would refuse again.
         logger.warning("job %s refused: %s", payload.jobId, exc)
         return {"jobId": payload.jobId, "state": "REFUSED", "reason": str(exc)}
@@ -62,19 +63,28 @@ def run(payload: RunJob, response: Response) -> dict[str, object]:
 
 
 def _process(payload: RunJob) -> dict[str, object]:
-    """Placeholder for the storage-backed run.
+    """Run the job against real storage and a real database."""
+    import os
+    import uuid as _uuid
 
-    Gate 7 replaces this with the Cloud Storage fetch and writeback. The
-    executor and validator it calls are already the real ones, exercised by the
-    worker test suite against real media, so what remains here is transport
-    rather than logic.
-    """
-    return {
-        "jobId": payload.jobId,
-        "state": "PENDING_STORAGE_WIRING",
-        "planDigest": payload.planDigest,
-        "validator": VALIDATOR_VERSION,
-    }
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import Session
+
+    from .jobs import process_job
+
+    database_url = os.environ.get("DATABASE_URL", "")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is not configured")
+
+    engine = create_engine(database_url, pool_pre_ping=True, pool_size=2)
+    try:
+        with Session(engine) as session:
+            outcome = process_job(_uuid.UUID(payload.jobId), session)
+            session.commit()
+    finally:
+        engine.dispose()
+
+    return {"jobId": payload.jobId, "validator": VALIDATOR_VERSION, **outcome}
 
 
 __all__ = ["app", "run_job", "validate_package", "Path"]

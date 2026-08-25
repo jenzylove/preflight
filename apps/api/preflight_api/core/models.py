@@ -481,3 +481,33 @@ class DeletionRequest(Base):
     error_code: Mapped[str | None] = mapped_column(String(80))
     requested_at: Mapped[datetime] = _created()
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class ProjectDestination(Base):
+    """Which destinations a project is being prepared for.
+
+    Without this, preflight would measure a project against every rule pack in
+    the database. The rule pack version is pinned at selection time so a
+    destination revising its requirements next week does not silently change
+    what an in-flight project is being judged against — a new preflight run
+    adopts the newer version deliberately.
+    """
+
+    __tablename__ = "project_destinations"
+
+    id: Mapped[uuid.UUID] = _pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    destination_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("destinations.id", ondelete="RESTRICT"), nullable=False
+    )
+    rule_pack_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("rule_packs.id", ondelete="RESTRICT")
+    )
+    confirmed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = _created()
+
+    __table_args__ = (
+        UniqueConstraint("project_id", "destination_id", name="uq_project_destination"),
+    )

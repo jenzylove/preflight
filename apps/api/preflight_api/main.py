@@ -20,6 +20,8 @@ from .core.config import get_settings
 from .core.db import configure_sessions
 from .delivery.router import owner_router as delivery_owner_router
 from .delivery.router import public_router as delivery_public_router
+from .destinations.router import router as destinations_router
+from .packages.router import router as packages_router
 from .preflight.execute import router as execute_router
 from .preflight.router import router as preflight_router
 from .projects.router import router as projects_router
@@ -65,6 +67,8 @@ app.include_router(preflight_router)
 app.include_router(execute_router)
 app.include_router(delivery_owner_router)
 app.include_router(delivery_public_router)
+app.include_router(destinations_router)
+app.include_router(packages_router)
 
 
 @app.get("/health/live", tags=["ops"])

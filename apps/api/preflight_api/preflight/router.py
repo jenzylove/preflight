@@ -447,3 +447,30 @@ def approve_plan(
             "would change the picture or audio needs a separate decision."
         ),
     )
+
+
+@router.get("/preflight/latest", response_model=PreflightOut)
+def latest_preflight(
+    project: Project = Depends(owned_project),
+    session: Session = Depends(get_session),
+) -> PreflightOut:
+    """Re-derive the most recent preflight result.
+
+    Recomputed from the stored rule packs and stored measurements rather than
+    from a cached payload, so what the page shows is always what the engine
+    currently concludes from the evidence on record. A stale cached matrix
+    would be a claim nobody could check.
+    """
+    from ..core.models import PreflightRun
+
+    previous = session.scalar(
+        select(PreflightRun)
+        .where(PreflightRun.project_id == project.id)
+        .order_by(PreflightRun.created_at.desc())
+    )
+    if previous is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No preflight has been run for this project yet.",
+        )
+    return run_preflight(project=project, session=session)

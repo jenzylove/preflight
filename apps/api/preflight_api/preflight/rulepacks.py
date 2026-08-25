@@ -80,11 +80,34 @@ def load_project_rule_packs(
     if project is None:
         return [], {}, set()
 
+    # Only the destinations this project selected. Loading every confirmed
+    # pack in the database would measure a film against requirements nobody
+    # chose to deliver to.
+    from ..core.models import ProjectDestination
+
+    selections = session.scalars(
+        select(ProjectDestination).where(ProjectDestination.project_id == project_id)
+    ).all()
+    if not selections:
+        return [], {}, set()
+
+    selected_destination_ids = {s.destination_id for s in selections}
+    pinned_pack_ids = {s.rule_pack_id for s in selections if s.rule_pack_id}
+
     pack_rows = session.scalars(
         select(RulePackRow)
-        .where(RulePackRow.status == CONFIRMED)
+        .where(
+            RulePackRow.status == CONFIRMED,
+            RulePackRow.destination_id.in_(selected_destination_ids),
+        )
         .order_by(RulePackRow.created_at.desc())
     ).all()
+
+    # A selection that pinned a version uses that version, not the newest.
+    if pinned_pack_ids:
+        pinned = [p for p in pack_rows if p.id in pinned_pack_ids]
+        unpinned = selected_destination_ids - {p.destination_id for p in pinned}
+        pack_rows = pinned + [p for p in pack_rows if p.destination_id in unpinned]
 
     packs: list[RulePack] = []
     evidence_lookup: dict[str, SourceEvidence] = {}
