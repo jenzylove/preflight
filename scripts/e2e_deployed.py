@@ -55,7 +55,7 @@ def request(
         headers["Authorization"] = f"Bearer {token}"
     req = urllib.request.Request(url, data=data, headers=headers, method=method)
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310
+        with urllib.request.urlopen(req, timeout=timeout) as r:  # noqa: S310  # https only
             text = r.read().decode("utf-8", "replace")
             try:
                 return r.status, json.loads(text)
@@ -146,7 +146,6 @@ def main() -> int:
 
     props = (measured_master.get("measured_properties") or {})
     audio = props.get("audio") or {}
-    video = props.get("video") or {}
     check("real loudness measured from the file",
           isinstance(audio.get("integratedLoudnessLufs"), (int, float)),
           f"{audio.get('integratedLoudnessLufs')} LUFS")
@@ -156,12 +155,13 @@ def main() -> int:
 
     print("\nDESTINATIONS")
     status, destinations = request(f"{API}/v1/destinations", token=token)
-    available = [d for d in destinations if d.get("available")] if isinstance(destinations, list) else []
+    listed = destinations if isinstance(destinations, list) else []
+    available = [d for d in listed if d.get("available")]
     check("destinations served with real rule packs", len(available) >= 2,
           ", ".join(f"{d['slug']} v{d['rule_pack_version']} "
                     f"({d['mandatory_rules']} mandatory)" for d in available))
     check("unreadable destinations disclosed",
-          any(not d.get("available") for d in destinations) if isinstance(destinations, list) else False)
+          any(not d.get("available") for d in listed))
 
     status, selection = request(
         f"{API}/v1/projects/{project_id}/destinations", "PUT",
@@ -210,7 +210,8 @@ def main() -> int:
     print("\nAPPROVAL AND EXECUTION")
     status, approval = request(
         f"{API}/v1/projects/{project_id}/repair-plans/{plan_id}/approve", "POST",
-        {"step_ids": [s["step_id"] for s in green]}, token=token,
+        {"plan_digest": plan["digest"],
+         "approved_step_ids": [s["step_id"] for s in green]}, token=token,
     )
     check("approval bound to the plan digest",
           status == 201 and isinstance(approval, dict)

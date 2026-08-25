@@ -19,22 +19,34 @@ Parallel track.
 
 ## Status
 
-Gates 0 through 6 complete: the transaction is proven, the schema and state
-machines enforce the safety properties, retrieval and extraction run live
-against real destinations, and the worker, validator, passports and delivery
-rooms are built and tested.
+Deployed and running.
+
+- **Web** — <https://preflight-web-584136898465.us-central1.run.app>
+- **API** — <https://preflight-api-584136898465.us-central1.run.app> ([docs](https://preflight-api-584136898465.us-central1.run.app/docs))
+
+Gates 0 through 7 are complete: the transaction is proven, the schema and state
+machines enforce the safety properties, retrieval and extraction have run live
+against real destinations and their output is persisted, and the API, worker and
+web app are deployed on Cloud Run against Cloud SQL.
 
 Measured, not asserted:
 
 ```
 mean extraction recall vs. human transcription   96%
-requirement mismatches found on a real fixture    9
-repaired by deterministic operations              4
-original asset sha256                             unchanged
-decoded picture through metadata repair           bit-identical
-cross-destination conflicts found and cited       1 (hard)
-tests                                           141
+rules retrieved and persisted                    193 across 2 destinations
+                                                 (Artdocfest 121, Berlinale 72)
+mandatory rules                                  102
+assertions carrying a cited source               all of them
+cross-destination conflicts detected             17 hard, 5 soft
+original asset sha256                            unchanged
+decoded picture through metadata repair          bit-identical
+tests                                            162
 ```
+
+Claims about the deployed environment in this file are only made where they were
+verified there. `scripts/e2e_deployed.py` runs that verification: it signs up
+through Identity Platform, uploads a real MP4, and asserts against what the
+deployed services actually return.
 
 Reproduce it:
 
@@ -43,6 +55,7 @@ python scripts/gate0/make_fixture.py     # synthesise the malformed master
 python scripts/gate0/run_spike.py        # measure, compare, repair, re-measure
 python scripts/gate0/check_conflicts.py  # prove the destinations really conflict
 python scripts/gate3/run_extraction.py   # live retrieval + extraction, scored
+python scripts/e2e_deployed.py           # the deployed system, end to end
 python -m pytest -q
 ```
 
@@ -167,11 +180,22 @@ bucket paths.
 ## Repository
 
 ```
-packages/contracts/     rule schema, compatibility engine, inspection, repairs
-packages/fixtures/      synthesised malformed demo media (no third-party footage)
-scripts/gate0/          the kill-spike: seed packs, fixture, end-to-end run
-docs/                   destination selection, trust model, runbook
+apps/web/               Next.js app - the browser journey
+apps/api/               FastAPI on Cloud Run - no media toolchain, by design
+apps/worker/            the only service that opens a media file
+apps/agent/             Parallel retrieval and Gemini extraction
+packages/contracts/     rule schema, compatibility engine, planner, passport
+packages/fixtures/      synthesised demo media (no third-party footage)
+scripts/                gate spikes, destination seeding, deployed end-to-end test
+infra/                  Terraform, Cloud Build configs, migrations
+docs/                   destination selection, trust model, threat model, runbook
 ```
+
+### The journey
+
+Sign in, create a project, upload a master, choose destinations, run preflight,
+review the repair plan, approve it, watch the worker run, read the packages and
+the passport, and share a delivery room — all from the deployed web app.
 
 ---
 

@@ -102,7 +102,7 @@ function PlanView({ projectId }: { projectId: string }) {
     setBusy(true);
     setError("");
     try {
-      await api.approvePlan(projectId, run.plan.plan_id, [...selected]);
+      await api.approvePlan(projectId, run.plan.plan_id, run.plan.digest, [...selected]);
       const job = await api.executePlan(projectId, run.plan.plan_id);
       setJobId(job.job_id);
       setJobState(job.state);

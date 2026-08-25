@@ -140,10 +140,24 @@ export const api = {
   latestPreflight: (projectId: string) =>
     call<PreflightRun>(`/v1/projects/${projectId}/preflight/latest`),
 
-  approvePlan: (projectId: string, planId: string, stepIds: string[]) =>
-    call<{ plan_digest: string; approved_steps: number; note: string }>(
+  // The digest is what the user is consenting to, so it travels with the
+  // approval. If the plan has changed since it was displayed, the server
+  // refuses rather than approving work nobody saw.
+  approvePlan: (
+    projectId: string,
+    planId: string,
+    planDigest: string,
+    stepIds: string[],
+  ) =>
+    call<{ plan_digest: string; approved_steps: string[]; note: string }>(
       `/v1/projects/${projectId}/repair-plans/${planId}/approve`,
-      { method: "POST", body: JSON.stringify({ step_ids: stepIds }) },
+      {
+        method: "POST",
+        body: JSON.stringify({
+          plan_digest: planDigest,
+          approved_step_ids: stepIds,
+        }),
+      },
     ),
 
   executePlan: (projectId: string, planId: string) =>

@@ -1,9 +1,9 @@
 # Preflight API.
 #
-# No ffmpeg here. The API never touches media — it issues signed URLs, records
-# evidence and dispatches jobs. Keeping the media toolchain out of this image
-# keeps its attack surface small and its cold starts short; the worker is a
-# separate image for exactly that reason.
+# No ffmpeg here, deliberately. The API never opens a media file — it issues
+# signed URLs, records evidence, and asks the worker to measure what was
+# uploaded. A service that cannot read a master cannot leak one, and keeping
+# the media toolchain out also keeps this image small and its cold starts short.
 
 FROM python:3.12-slim
 
@@ -26,7 +26,8 @@ RUN pip install --no-cache-dir \
     "pillow>=11.0" \
     "google-cloud-storage>=2.18" \
     "google-cloud-tasks>=2.16" \
-    "firebase-admin>=6.5" \n    "httpx>=0.28"
+    "firebase-admin>=6.5" \
+    "httpx>=0.28"
 
 ENV PYTHONPATH=/app/packages/contracts:/app/apps/api \
     PYTHONUNBUFFERED=1

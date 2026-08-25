@@ -23,7 +23,7 @@ from preflight_contracts.compare import (
     find_conflicts,
     is_ready,
 )
-from preflight_contracts.plan import OPERATION_CATALOGUE, Plan, Safety, build_plan
+from preflight_contracts.plan import OPERATION_CATALOGUE, Plan, build_plan
 from preflight_contracts.rules import AssetType, Severity
 from preflight_contracts.state import ProjectState, TransitionError, transition_project
 from pydantic import BaseModel, Field
@@ -428,14 +428,9 @@ def approve_plan(
             ),
         )
 
-    steps = session.scalars(
-        select(RepairStep).where(RepairStep.repair_plan_id == plan_row.id)
-    ).all()
-    yellow = {s.operation for s in steps if s.safety_level != Safety.GREEN.value}
-    if yellow:
-        # Approving the plan never authorises the operations Preflight refuses
-        # to automate. Those need their own explicit decision.
-        pass
+    # Approving a plan never authorises the operations Preflight refuses to
+    # automate. The worker filters to green steps regardless of what is listed
+    # here, so a yellow id in the payload grants nothing.
 
     existing = session.scalar(
         select(Approval).where(
