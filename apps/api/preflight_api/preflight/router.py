@@ -89,6 +89,7 @@ class StepOut(BaseModel):
 
 
 class PlanOut(BaseModel):
+    plan_id: uuid.UUID | None = None
     digest: str
     steps: list[StepOut]
     needs_your_decision: list[StepOut]
@@ -172,11 +173,40 @@ def _step_out(step, executable: bool) -> StepOut:
     )
 
 
-def _plan_out(plan: Plan, runtime_seconds: int, roles: set[str]) -> PlanOut:
+def _plan_out(
+    plan: Plan, runtime_seconds: int, roles: set[str],
+    plan_row=None, session=None,
+) -> PlanOut:
+    # Map each planned step onto the row that was persisted for it, so the
+    # step_id the user approves is the one the worker will look up.
+    row_for: dict[str, str] = {}
+    if plan_row is not None and session is not None:
+        rows = session.scalars(
+            select(RepairStep).where(RepairStep.repair_plan_id == plan_row.id)
+        ).all()
+        used: set[str] = set()
+        for step in plan.steps:
+            match = next(
+                (r for r in rows
+                 if r.operation == step.operation
+                 and r.output_role == step.output_role
+                 and str(r.id) not in used),
+                None,
+            )
+            if match is not None:
+                row_for[step.step_id] = str(match.id)
+                used.add(str(match.id))
+
+    def out(step, executable: bool) -> StepOut:
+        rendered = _step_out(step, executable)
+        rendered.step_id = row_for.get(step.step_id, rendered.step_id)
+        return rendered
+
     return PlanOut(
+        plan_id=plan_row.id if plan_row is not None else None,
         digest=plan.digest(),
-        steps=[_step_out(s, True) for s in plan.green],
-        needs_your_decision=[_step_out(s, False) for s in plan.needs_decision],
+        steps=[out(s, True) for s in plan.green],
+        needs_your_decision=[out(s, False) for s in plan.needs_decision],
         blocked=plan.blocked,
         unresolved=plan.unresolved,
         preserved_assets=plan.preserved_assets(roles),
@@ -267,7 +297,7 @@ def run_preflight(
     session.add(run)
     session.flush()
 
-    _persist_plan(project, run, plan, session)
+    plan_row = _persist_plan(project, run, plan, session)
 
     try:
         project.state = transition_project(
@@ -281,7 +311,7 @@ def run_preflight(
         comparison_digest=run.comparison_digest,
         destinations=matrices,
         conflicts=find_conflicts(packs),
-        plan=_plan_out(plan, project.runtime_seconds or 60, roles),
+        plan=_plan_out(plan, project.runtime_seconds or 60, roles, plan_row, session),
         limitations=_limitations(plan, matrices),
     )
 

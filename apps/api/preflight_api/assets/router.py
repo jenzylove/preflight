@@ -8,7 +8,7 @@ server never takes the client's word for what was uploaded.
 
 from __future__ import annotations
 
-import hashlib
+import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -21,6 +21,8 @@ from ..auth.identity import owned_project
 from ..core.db import get_session
 from ..core.models import Asset, AssetEvidence, Project
 from . import storage
+
+logger = logging.getLogger("preflight.assets")
 
 router = APIRouter(prefix="/v1/projects/{project_id}/assets", tags=["assets"])
 
@@ -154,69 +156,69 @@ def complete_upload(
 
 
 def _inspect_and_record(asset: Asset, session: Session) -> AssetEvidence:
-    """Download, hash and measure. Deterministic tools only."""
-    import tempfile
-    from pathlib import Path
+    """Ask the worker to measure the stored object, and record what it says.
 
-    from preflight_contracts import inspect_media
+    The API does not open the file. It carries no media toolchain by design, so
+    a compromised API can ask for a description of a master but cannot read one.
+    The worker is private and reachable only with a service identity token.
+    """
+    import google.auth.transport.requests
+    import google.oauth2.id_token
+    import httpx
 
     from ..core.config import get_settings
 
     settings = get_settings()
-    from google.cloud import storage as gcs
+    base = settings.worker_base_url.rstrip("/")
 
-    client = gcs.Client(project=settings.google_cloud_project)
-    blob = client.bucket(settings.gcs_bucket).blob(asset.storage_key)
+    headers = {"Content-Type": "application/json"}
+    try:
+        auth_request = google.auth.transport.requests.Request()
+        headers["Authorization"] = "Bearer " + google.oauth2.id_token.fetch_id_token(
+            auth_request, base
+        )
+    except Exception:  # noqa: BLE001 - absent locally, present on Cloud Run
+        logger.info("no service identity available; calling the worker unauthenticated")
 
-    with tempfile.TemporaryDirectory() as tmp:
-        local = Path(tmp) / f"asset{Path(asset.storage_key).suffix}"
-        blob.download_to_filename(str(local))
+    try:
+        response = httpx.post(
+            f"{base}/assets/inspect",
+            json={"storageKey": asset.storage_key, "role": asset.role},
+            headers=headers,
+            timeout=300.0,
+        )
+    except httpx.HTTPError as exc:
+        logger.warning("inspection service unreachable: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Measurement is temporarily unavailable. Your file was uploaded; "
+                   "try completing it again shortly.",
+        ) from None
 
-        digest = hashlib.sha256()
-        with local.open("rb") as handle:
-            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-                digest.update(chunk)
-        asset.sha256 = digest.hexdigest()
+    if response.status_code == 422:
+        asset.custody_state = "REJECTED"
+        detail = response.json().get("detail", "")
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"This file could not be read as a valid {asset.role}: {detail}",
+        )
+    if response.status_code != 200:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="The uploaded file could not be measured.",
+        )
 
-        try:
-            if asset.role == "master":
-                video = inspect_media.inspect_video(local)
-                audio = inspect_media.inspect_audio(local)
-                properties = {
-                    "video": video.properties,
-                    "audio": {
-                        k: v for k, v in audio.properties.items()
-                        if not k.startswith("_")
-                    },
-                }
-                properties["video"]["videoStreamMd5"] = inspect_media.video_stream_md5(local)
-                inspector, version = "ffprobe+ebur128", video.inspector_version
-            elif asset.role == "subtitle":
-                result = inspect_media.inspect_subtitle(local)
-                properties, inspector, version = (
-                    result.properties, result.inspector, result.inspector_version
-                )
-            else:
-                result = inspect_media.inspect_poster(local)
-                properties, inspector, version = (
-                    result.properties, result.inspector, result.inspector_version
-                )
-        except inspect_media.InspectionError as exc:
-            # A file that cannot be measured is rejected before it can be
-            # planned against. Better to fail here than to build a package on
-            # properties nobody established.
-            asset.custody_state = "REJECTED"
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"This file could not be read as a valid {asset.role}: {exc}",
-            ) from exc
+    measured = response.json()
+    asset.sha256 = measured["sha256"]
+    if measured.get("byteSize"):
+        asset.byte_size = measured["byteSize"]
 
     evidence = AssetEvidence(
         asset_id=asset.id,
-        inspector=inspector,
-        inspector_version=version,
-        schema_version=inspect_media.INSPECTOR_SCHEMA_VERSION,
-        measured_properties_json=properties,
+        inspector=measured["inspector"],
+        inspector_version=measured["inspectorVersion"],
+        schema_version=measured["schemaVersion"],
+        measured_properties_json=measured["properties"],
     )
     session.add(evidence)
     session.flush()

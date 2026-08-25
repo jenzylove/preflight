@@ -26,7 +26,7 @@ RUN pip install --no-cache-dir \
     "pillow>=11.0" \
     "google-cloud-storage>=2.18" \
     "google-cloud-tasks>=2.16" \
-    "firebase-admin>=6.5"
+    "firebase-admin>=6.5" \n    "httpx>=0.28"
 
 ENV PYTHONPATH=/app/packages/contracts:/app/apps/api \
     PYTHONUNBUFFERED=1

@@ -185,6 +185,15 @@ def _dispatch(job: Job, project: Project, plan_digest: str) -> None:
                     "http_method": tasks_v2.HttpMethod.POST,
                     "url": f"{settings.worker_base_url}/jobs/run",
                     "headers": {"Content-Type": "application/json"},
+                    # The worker is private. Cloud Tasks authenticates to it as
+                    # the runtime service account, so the only caller that can
+                    # start a media job is the queue itself.
+                    "oidc_token": {
+                        "service_account_email": settings.worker_service_account
+                        or f"preflight-api@{settings.google_cloud_project}"
+                           ".iam.gserviceaccount.com",
+                        "audience": settings.worker_base_url,
+                    },
                     "body": json.dumps({
                         "jobId": str(job.id),
                         "projectId": str(project.id),
