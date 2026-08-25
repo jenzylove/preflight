@@ -135,8 +135,17 @@ def execute_plan(
                 detail="Could not queue this job. Please try again.",
             ) from None
 
-    if created:
+    # Re-dispatch a job that exists but was never picked up. Dispatch failure
+    # is logged rather than raised, which previously left such a job queued
+    # forever with nothing to nudge it. Cloud Tasks deduplicates on task name,
+    # so asking twice is safe and asking once too few is not.
+    needs_dispatch = created or (
+        job.state == JobState.QUEUED.value and job.attempt_count == 0
+    )
+    if needs_dispatch:
         _dispatch(job, project, plan_row.digest)
+
+    if created:
         try:
             project.state = transition_project(
                 ProjectState(project.state), ProjectState.PROCESSING
@@ -155,6 +164,8 @@ def execute_plan(
         message=(
             "Processing started." if created
             else "This plan is already running; returning the existing job."
+        ) if not (needs_dispatch and not created) else (
+            "Processing was queued but had not started; it has been re-sent."
         ),
     )
 

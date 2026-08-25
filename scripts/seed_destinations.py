@@ -37,7 +37,7 @@ from preflight_agent.tools.parallel_search import (  # noqa: E402
     machine_readability,
     search_destination_requirements,
 )
-from preflight_api.core.models import (  # noqa: E402
+from preflight_contracts.models import (  # noqa: E402
     Destination,
     RulePackRow,
     RuleRow,

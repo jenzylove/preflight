@@ -47,7 +47,7 @@ def _now() -> datetime:
 
 def process_job(job_id: uuid.UUID, session) -> dict[str, Any]:
     """Run one approved repair plan end to end."""
-    from preflight_api.core.models import (
+    from preflight_contracts.models import (
         Approval,
         Asset,
         Job,
@@ -55,7 +55,7 @@ def process_job(job_id: uuid.UUID, session) -> dict[str, Any]:
         RepairPlan,
         RepairStep,
     )
-    from preflight_api.preflight.rulepacks import load_project_rule_packs
+    from preflight_contracts.rulepacks import load_project_rule_packs
     from sqlalchemy import select
 
     job = session.get(Job, job_id)
@@ -225,7 +225,7 @@ def _build_and_validate(
     derived_records: list[dict[str, Any]],
 ) -> dict[str, Any]:
     """Assemble one destination's package and decide whether it may verify."""
-    from preflight_api.core.models import Destination, Package
+    from preflight_contracts.models import Destination, Package
     from sqlalchemy import select
 
     destination = session.scalar(
@@ -301,7 +301,7 @@ def _build_and_validate(
 
 
 def _rule_pack_row_id(destination_id, session):
-    from preflight_api.core.models import RulePackRow
+    from preflight_contracts.models import RulePackRow
     from sqlalchemy import select
 
     row = session.scalar(

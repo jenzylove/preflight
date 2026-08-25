@@ -19,7 +19,7 @@ sys.path.insert(0, str(ROOT / "apps" / "api"))
 sys.path.insert(0, str(ROOT / "packages" / "contracts"))
 
 from preflight_api.core.config import get_settings  # noqa: E402
-from preflight_api.core.models import Base  # noqa: E402
+from preflight_contracts.models import Base  # noqa: E402
 
 config = context.config
 if config.config_file_name is not None:
