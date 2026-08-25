@@ -25,7 +25,7 @@ export default function Home() {
       </p>
 
       <Link
-        href="/projects/new"
+        href="/projects"
         className="mt-10 inline-flex w-fit items-center rounded-lg bg-neutral-100 px-6 py-3
                    font-medium text-neutral-950 transition hover:bg-white
                    focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400

@@ -9,8 +9,13 @@ work
 *.mp4
 *.mov
 *.wav
-apps/web
 packages/fixtures
 **/__pycache__
 **/.pytest_cache
 **/.ruff_cache
+
+# The API and worker Dockerfiles simply do not COPY apps/web, so leaving it
+# in the context costs a little upload time and keeps one .dockerignore honest
+# for all three images.
+apps/web/node_modules
+apps/web/.next
