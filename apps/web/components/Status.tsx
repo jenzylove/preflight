@@ -140,7 +140,9 @@ export function StageChip({ state }: { state: string }) {
 }
 
 /** The safety classification of a repair, in plain language. */
-export const SAFETY: Record<string, { label: string; tone: Tone; note: string }> = {
+type SafetyLevel = { label: string; tone: Tone; note: string };
+
+export const SAFETY: Record<"green" | "yellow" | "red", SafetyLevel> = {
   green: {
     label: "Safe to run",
     tone: "ok",
@@ -158,14 +160,18 @@ export const SAFETY: Record<string, { label: string; tone: Tone; note: string }>
   },
 };
 
-const UNKNOWN_SAFETY = {
+/** Anything Preflight does not recognise is treated as something it will not do. */
+const UNKNOWN_SAFETY: SafetyLevel = {
   label: "Preflight will not do this",
-  tone: "stop" as Tone,
+  tone: "stop",
   note: "This operation is not one Preflight is willing to perform.",
 };
 
 export function SafetyChip({ safety }: { safety: string }) {
-  const level = SAFETY[safety] ?? UNKNOWN_SAFETY;
+  const level =
+    safety === "green" || safety === "yellow" || safety === "red"
+      ? SAFETY[safety]
+      : UNKNOWN_SAFETY;
   return <StatusChip tone={level.tone}>{level.label}</StatusChip>;
 }
 

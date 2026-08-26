@@ -9,6 +9,43 @@
  */
 
 import { getIdToken } from "./auth";
+import type {
+  Asset,
+  Destination,
+  DeliveryRoom,
+  JobStatus,
+  PackageSummary,
+  Passport,
+  Plan,
+  PreflightRun,
+  Project,
+  Rule,
+  UploadIntent,
+} from "./types";
+
+// Re-exported so call sites can import the client and the shapes it returns
+// from one place. The definitions live in ./types, which mirrors the API.
+export type {
+  Assertion,
+  Asset,
+  Conflict,
+  DeliveryRoom,
+  Destination,
+  DestinationMatrix,
+  JobStatus,
+  PackageFile,
+  PackageSummary,
+  Passport,
+  Plan,
+  PlanStep,
+  PreflightRun,
+  Project,
+  PublicRoom,
+  Rule,
+  Source,
+  Transformation,
+  UploadIntent,
+} from "./types";
 
 export const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL ??
@@ -51,37 +88,6 @@ async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   return res.json();
 }
 
-export interface Project {
-  id: string;
-  title: string;
-  project_type: string;
-  primary_language: string | null;
-  runtime_seconds: number | null;
-  country_of_origin: string | null;
-  state: string;
-  created_at: string;
-}
-
-export interface Asset {
-  id: string;
-  role: string;
-  original_filename: string;
-  content_type: string;
-  byte_size: number;
-  sha256: string | null;
-  custody_state: string;
-  immutable: boolean;
-  measured_properties: Record<string, unknown> | null;
-  inspector: string | null;
-  inspector_version: string | null;
-}
-
-export interface UploadIntent {
-  asset_id: string;
-  upload_url: string;
-  expires_in_seconds: number;
-}
-
 export const api = {
   listProjects: () => call<Project[]>("/v1/projects"),
 
@@ -109,6 +115,8 @@ export const api = {
       filename: string;
       content_type: string;
       byte_size: number;
+      /** Only ever what the user told us; never inferred from the film. */
+      language?: string;
     },
   ) =>
     call<UploadIntent>(`/v1/projects/${projectId}/assets/upload-intent`, {
@@ -122,6 +130,28 @@ export const api = {
     }),
 
   listDestinations: () => call<Destination[]>("/v1/destinations"),
+
+  /** Every requirement this project will be measured against, with evidence. */
+  listRules: (projectId: string) =>
+    call<Rule[]>(`/v1/projects/${projectId}/rules`),
+
+  /**
+   * Record the owner's judgement about one extracted requirement.
+   *
+   * Setting a rule aside is not a delete. The rule stays in the pack, the
+   * decision is attributed, and it surfaces on the passport as a stated
+   * limitation — which is why a reason is required rather than optional.
+   */
+  setDisposition: (
+    projectId: string,
+    ruleId: string,
+    action: "accept" | "set_aside",
+    reason: string,
+  ) =>
+    call<{ rule_id: string; action: string; reason: string; note: string }>(
+      `/v1/projects/${projectId}/rules/${ruleId}/disposition`,
+      { method: "PUT", body: JSON.stringify({ action, reason }) },
+    ),
 
   getSelectedDestinations: (projectId: string) =>
     call<{ selected: Destination[]; project_state: string }>(
@@ -238,122 +268,3 @@ export async function uploadToSignedUrl(
 // ---------------------------------------------------------------------------
 // Destinations, preflight, plan, packages, passport, delivery
 // ---------------------------------------------------------------------------
-
-export interface DestinationSource {
-  url: string | null;
-  retrieved_at: string;
-  trust_tier: string;
-  excerpt: string;
-}
-
-export interface Destination {
-  id: string;
-  slug: string;
-  name: string;
-  official_domain: string | null;
-  requires_private_spec: boolean;
-  available: boolean;
-  rule_pack_id: string | null;
-  rule_pack_version: number | null;
-  rule_pack_digest: string | null;
-  mandatory_rules: number;
-  total_rules: number;
-  sources: DestinationSource[];
-  unavailable_reason: string | null;
-}
-
-export interface PlanStep {
-  step_id: string;
-  operation: string;
-  safety: "green" | "yellow" | "red";
-  destination_id: string;
-  input_role: string;
-  output_role: string;
-  parameters: Record<string, unknown>;
-  explains: string;
-  executable: boolean;
-  resolves: string[];
-}
-
-export interface RepairPlan {
-  plan_id: string | null;
-  digest: string;
-  steps: PlanStep[];
-  blocked: Record<string, unknown>[];
-  unresolved: Record<string, unknown>[];
-  preserved_assets: string[];
-  estimated_seconds: number;
-  shared_across_destinations: Record<string, string[]>;
-}
-
-export interface PreflightRun {
-  run_id: string;
-  comparison_digest: string;
-  destinations: {
-    destination_id: string;
-    rule_pack_digest: string;
-    satisfied: number;
-    total: number;
-    ready: boolean;
-    blocking: string[];
-    assertions: {
-      rule_id: string;
-      asset_type: string;
-      field: string;
-      published: string;
-      measured: string | number | boolean | null;
-      result: string;
-      severity: string;
-      source_url?: string | null;
-      source_excerpt?: string | null;
-      retrieved_at?: string | null;
-      repair_operation?: string | null;
-      explanation?: string;
-    }[];
-  }[];
-  conflicts: Record<string, unknown>[];
-  plan: RepairPlan;
-  limitations: string[];
-}
-
-export interface JobStatus {
-  job_id: string;
-  type: string;
-  state: string;
-  attempt: number;
-  error: string | null;
-  message: string;
-}
-
-export interface PackageSummary {
-  id: string;
-  destination_id: string;
-  destination_name: string;
-  state: string;
-  verified: boolean;
-  package_sha256: string | null;
-  rule_pack_version: number | null;
-  rule_pack_digest: string | null;
-  requirements_satisfied: string;
-  files: { path: string; sha256: string }[];
-  transformations: {
-    operation: string;
-    parameters: Record<string, unknown>;
-    input_sha256: string | null;
-    output_sha256: string | null;
-    picture_preserved: boolean | null;
-  }[];
-  limitations: string[];
-  validator_version: string | null;
-  created_at: string;
-}
-
-export interface DeliveryRoom {
-  room_id: string;
-  url_token: string | null;
-  recipient_label: string | null;
-  expires_at: string;
-  revoked_at: string | null;
-  state: string;
-  note: string;
-}

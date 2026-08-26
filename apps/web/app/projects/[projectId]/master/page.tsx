@@ -1,39 +1,47 @@
 "use client";
 
+import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 
-import { Shell } from "@/components/Shell";
-import { api, uploadToSignedUrl, type Asset } from "@/lib/api";
+import { Working } from "@/components/Status";
+import { Workspace } from "@/components/workspace/Workspace";
+import { ProjectRail } from "@/components/workspace/Rail";
+import { api, uploadToSignedUrl } from "@/lib/api";
+import type { Asset, Project } from "@/lib/types";
 
 /**
- * Master assets.
+ * Handing Preflight the master.
  *
- * Files go straight from the browser to private storage using a resumable
- * session the API issues for one object. They never pass through the API, and
- * the browser never learns the bucket path.
+ * The upload goes straight from the browser to private storage using a signed
+ * session the API issues for one object; the file never passes through the
+ * API, which is why a feature-length master is possible at all.
  *
- * Nothing on this page is reported until the *server* has measured it. The
- * client's opinion of what it uploaded is not evidence.
+ * Nothing on this page is measured in the browser. Every property shown comes
+ * back from the worker after it has opened the file, which is why the tool and
+ * its version are recorded next to the numbers.
  */
 
-const ROLES = [
+const SLOTS = [
   {
     role: "master",
-    label: "Master",
-    accept: "video/mp4,video/quicktime",
-    hint: "MP4 or MOV. This file is never modified — repairs write new files.",
+    title: "The master",
+    hint: "MP4 or QuickTime. This is the file everything else is measured against.",
+    accept: ".mp4,.mov,video/mp4,video/quicktime",
+    required: true,
   },
   {
     role: "subtitle",
-    label: "Subtitles",
-    accept: ".srt,.vtt,text/vtt,application/x-subrip,text/plain",
-    hint: "SubRip or WebVTT sidecar.",
+    title: "Subtitles",
+    hint: "SubRip or WebVTT, as a separate file.",
+    accept: ".srt,.vtt,text/vtt",
+    required: false,
   },
   {
     role: "poster",
-    label: "Poster",
-    accept: "image/jpeg,image/png",
-    hint: "JPEG or PNG key art.",
+    title: "Key art",
+    hint: "JPEG or PNG.",
+    accept: ".jpg,.jpeg,.png,image/jpeg,image/png",
+    required: false,
   },
 ] as const;
 
@@ -44,148 +52,211 @@ export default function MasterPage({
 }) {
   const { projectId } = use(params);
   return (
-    <Shell>
-      <MasterAssets projectId={projectId} />
-    </Shell>
+    <Workspace>
+      <Master projectId={projectId} />
+    </Workspace>
   );
 }
 
-function MasterAssets({ projectId }: { projectId: string }) {
+function Master({ projectId }: { projectId: string }) {
+  const [project, setProject] = useState<Project | null>(null);
   const [assets, setAssets] = useState<Asset[]>([]);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  const refresh = useCallback(
-    () => api.listAssets(projectId).then(setAssets).catch(() => {}),
-    [projectId],
-  );
+  const refresh = useCallback(async () => {
+    const [p, a] = await Promise.all([
+      api.getProject(projectId),
+      api.listAssets(projectId),
+    ]);
+    setProject(p);
+    setAssets(a);
+  }, [projectId]);
 
   useEffect(() => {
-    refresh();
+    refresh().catch((caught) =>
+      setError(caught instanceof Error ? caught.message : "Could not load this project."),
+    );
   }, [refresh]);
 
-  const byRole = Object.fromEntries(assets.map((a) => [a.role, a]));
+  if (error) {
+    return (
+      <p role="alert" className="border-l-2 border-stop bg-stop-bg/40 py-4 pl-4 text-paper-100">
+        {error}
+      </p>
+    );
+  }
+  if (!project) {
+    return <p className="slate text-paper-400" role="status">Loading</p>;
+  }
+
+  const master = assets.find((a) => a.role === "master");
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-neutral-100">Your master</h1>
-      <p className="mt-2 text-sm text-neutral-400">
-        Add the files you intend to deliver. Preflight measures each one with
-        ffprobe, ffmpeg and Pillow after it arrives, and records the tool version
-        alongside every value.
-      </p>
+    <>
+      <ProjectRail project={project} />
 
-      {error && (
-        <p role="alert" className="mt-4 text-sm text-rose-400">
-          {error}
+      <div className="mb-10">
+        <h2 className="font-display text-2xl text-paper-000">
+          {master ? "Your master, measured" : "Give Preflight the master"}
+        </h2>
+        <p className="mt-3 max-w-measure text-[15px] leading-relaxed text-paper-300">
+          {master
+            ? "Everything below was read from the file itself after upload. Your original is stored unchanged and is never written to."
+            : "Upload the finished film. Preflight will open it, measure what it actually is, and record a hash so you can prove the original was never altered."}
         </p>
-      )}
+      </div>
 
-      <div className="mt-8 space-y-4">
-        {ROLES.map((spec) => (
-          <AssetSlot
-            key={spec.role}
+      <div className="space-y-4">
+        {SLOTS.map((slot) => (
+          <Slot
+            key={slot.role}
             projectId={projectId}
-            spec={spec}
-            asset={byRole[spec.role]}
+            slot={slot}
+            asset={assets.find((a) => a.role === slot.role)}
             onDone={refresh}
-            onError={setError}
           />
         ))}
       </div>
 
-      {byRole.master?.sha256 && (
-        <a
-          href={`/projects/${projectId}/destinations`}
-          className="mt-8 inline-block rounded bg-neutral-100 px-5 py-2 font-medium
-                     text-neutral-950 transition hover:bg-white"
-        >
-          Choose destinations
-        </a>
+      {master && (
+        <div className="mt-10 flex justify-end">
+          <Link
+            href={`/projects/${projectId}/destinations`}
+            className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium
+                       text-ink-000 transition hover:bg-white"
+          >
+            Choose destinations
+          </Link>
+        </div>
       )}
-    </main>
+    </>
   );
 }
 
-function AssetSlot({
+type SlotSpec = (typeof SLOTS)[number];
+
+function Slot({
   projectId,
-  spec,
+  slot,
   asset,
   onDone,
-  onError,
 }: {
   projectId: string;
-  spec: (typeof ROLES)[number];
+  slot: SlotSpec;
   asset?: Asset;
-  onDone: () => void;
-  onError: (m: string) => void;
+  onDone: () => Promise<void>;
 }) {
-  const [progress, setProgress] = useState<number | null>(null);
-  const [measuring, setMeasuring] = useState(false);
+  const [phase, setPhase] = useState<"idle" | "sending" | "measuring">("idle");
+  const [sent, setSent] = useState(0);
+  const [failure, setFailure] = useState<string | null>(null);
+  const [language, setLanguage] = useState("");
 
-  async function handle(file: File) {
-    onError("");
-    setProgress(0);
+  async function upload(file: File) {
+    setFailure(null);
+    setPhase("sending");
+    setSent(0);
     try {
       const intent = await api.uploadIntent(projectId, {
-        role: spec.role,
+        role: slot.role,
         filename: file.name,
-        content_type: file.type || "application/octet-stream",
+        content_type: file.type || guessType(file.name),
         byte_size: file.size,
+        ...(slot.role === "subtitle" && language ? { language } : {}),
       });
-      await uploadToSignedUrl(intent.upload_url, file, setProgress);
-      setProgress(null);
-      setMeasuring(true);
+
+      await uploadToSignedUrl(intent.upload_url, file, setSent);
+
+      // The worker opens the file here. On a long master this is the slow
+      // part, and it is honest to say what is happening rather than leave the
+      // progress bar sitting at 100%.
+      setPhase("measuring");
       await api.completeUpload(projectId, intent.asset_id);
-      onDone();
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Upload failed.");
-    } finally {
-      setProgress(null);
-      setMeasuring(false);
+      await onDone();
+      setPhase("idle");
+    } catch (caught) {
+      setFailure(
+        caught instanceof Error ? caught.message : "That upload did not complete.",
+      );
+      setPhase("idle");
     }
   }
 
   return (
-    <section className="rounded-lg border border-neutral-800 p-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="font-medium text-neutral-100">{spec.label}</h2>
-        {asset?.sha256 && (
-          <span className="text-xs text-emerald-400">Measured</span>
+    <section className="rounded-[3px] border border-line bg-ink-100 p-5">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <div>
+          <h3 className="text-[15px] font-medium text-paper-000">
+            {slot.title}
+            {!slot.required && (
+              <span className="ml-2 text-xs font-normal text-paper-400">optional</span>
+            )}
+          </h3>
+          <p className="mt-1 text-sm text-paper-400">{slot.hint}</p>
+        </div>
+
+        {!asset && phase === "idle" && (
+          <label className="cursor-pointer rounded-[3px] border border-line-strong px-4 py-2
+                            text-sm text-paper-100 transition hover:bg-ink-200">
+            Choose file
+            <input
+              type="file"
+              accept={slot.accept}
+              className="sr-only"
+              onChange={(event) => {
+                const file = event.target.files?.[0];
+                if (file) void upload(file);
+              }}
+            />
+          </label>
         )}
       </div>
-      <p className="mt-1 text-sm text-neutral-500">{spec.hint}</p>
 
-      {!asset && progress === null && !measuring && (
-        <input
-          type="file"
-          accept={spec.accept}
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) handle(f);
-          }}
-          className="mt-3 block w-full text-sm text-neutral-400
-                     file:mr-3 file:rounded file:border-0 file:bg-neutral-800
-                     file:px-3 file:py-1.5 file:text-neutral-200"
-        />
-      )}
-
-      {progress !== null && (
-        <div className="mt-3">
-          <div className="h-1.5 overflow-hidden rounded bg-neutral-800">
-            <div
-              className="h-full bg-sky-500 transition-all"
-              style={{ width: `${Math.round(progress * 100)}%` }}
-            />
-          </div>
-          <p className="mt-1 text-xs text-neutral-500">
-            Uploading directly to private storage — {Math.round(progress * 100)}%
+      {slot.role === "subtitle" && !asset && phase === "idle" && (
+        <div className="mt-4">
+          <label htmlFor="sub-lang" className="slate block text-paper-400">
+            Language of these subtitles
+          </label>
+          <input
+            id="sub-lang"
+            value={language}
+            onChange={(event) => setLanguage(event.target.value)}
+            placeholder="en"
+            className="mt-2 w-28 rounded-[3px] border border-line bg-ink-000 px-3 py-1.5
+                       font-mono text-sm text-paper-000 outline-none focus:border-line-strong"
+          />
+          {/* A subtitle file does not record its own language, and taking the
+              film's primary language as the subtitle's would be a measurement
+              nobody made. So it is asked for. */}
+          <p className="mt-1.5 text-xs text-paper-400">
+            Subtitle files do not carry this, so Preflight cannot read it. Some
+            destinations require it.
           </p>
         </div>
       )}
 
-      {measuring && (
-        <p className="mt-3 text-sm text-sky-400">
-          Measuring the file the server received…
+      {phase === "sending" && (
+        <div className="mt-4">
+          <div className="h-[2px] w-full overflow-hidden rounded-full bg-ink-200">
+            <div
+              className="h-full bg-paper-200 transition-[width] duration-200"
+              style={{ width: `${Math.round(sent * 100)}%` }}
+            />
+          </div>
+          <p className="mt-2 text-sm text-paper-300" role="status">
+            Sending to private storage · {Math.round(sent * 100)}%
+          </p>
+        </div>
+      )}
+
+      {phase === "measuring" && (
+        <div className="mt-4">
+          <Working label="Opening the file and measuring it" />
+        </div>
+      )}
+
+      {failure && (
+        <p role="alert" className="mt-4 border-l-2 border-stop bg-stop-bg/40 py-2.5 pl-3 text-sm text-paper-100">
+          {failure}
         </p>
       )}
 
@@ -194,53 +265,128 @@ function AssetSlot({
   );
 }
 
+/**
+ * What the worker found.
+ *
+ * Grouped and labelled rather than dumped as JSON, with the raw evidence
+ * available underneath for anyone who wants it. Provenance sits with the
+ * values because a measurement without a tool and version behind it is just
+ * an assertion.
+ */
 function Measured({ asset }: { asset: Asset }) {
-  const props = asset.measured_properties;
-  const flat: [string, unknown][] = [];
+  const properties = asset.measured_properties ?? {};
+  const groups = Object.entries(properties).filter(
+    ([, value]) => value && typeof value === "object",
+  ) as [string, Record<string, unknown>][];
 
-  if (props) {
-    for (const [k, v] of Object.entries(props)) {
-      if (v && typeof v === "object" && !Array.isArray(v)) {
-        for (const [k2, v2] of Object.entries(v as Record<string, unknown>)) {
-          if (v2 !== null && !k2.startsWith("_")) flat.push([`${k}.${k2}`, v2]);
-        }
-      } else if (v !== null) {
-        flat.push([k, v]);
-      }
-    }
-  }
+  const flat = Object.entries(properties).filter(
+    ([, value]) => !value || typeof value !== "object",
+  );
 
   return (
-    <div className="mt-3 space-y-2 text-sm">
-      <p className="text-neutral-300">{asset.original_filename}</p>
+    <div className="mt-5 border-t border-line pt-5">
+      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
+        <p className="text-sm text-paper-100">{asset.original_filename}</p>
+        <p className="text-xs text-paper-400">{formatBytes(asset.byte_size)}</p>
+      </div>
 
-      {asset.sha256 && (
-        <p className="break-all font-mono text-xs text-neutral-500">
-          sha256 {asset.sha256}
-        </p>
-      )}
-
-      {asset.inspector && (
-        <p className="text-xs text-neutral-500">
-          Measured by {asset.inspector} {asset.inspector_version}
-        </p>
-      )}
+      {groups.map(([groupName, values]) => (
+        <div key={groupName} className="mt-4">
+          <h4 className="slate mb-2 text-paper-400">{groupName}</h4>
+          <dl className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+            {Object.entries(values)
+              .filter(([key]) => !key.startsWith("_"))
+              .map(([key, value]) => (
+                <Row key={key} label={key} value={value} />
+              ))}
+          </dl>
+        </div>
+      ))}
 
       {flat.length > 0 && (
-        <details>
-          <summary className="cursor-pointer text-xs text-neutral-500 hover:text-neutral-300">
-            What Preflight measured ({flat.length} properties)
-          </summary>
-          <dl className="mt-2 grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
-            {flat.map(([k, v]) => (
-              <div key={k} className="contents">
-                <dt className="truncate font-mono text-neutral-500">{k}</dt>
-                <dd className="text-neutral-300">{String(v)}</dd>
-              </div>
+        <dl className="mt-4 grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+          {flat
+            .filter(([key]) => !key.startsWith("_"))
+            .map(([key, value]) => (
+              <Row key={key} label={key} value={value} />
             ))}
-          </dl>
-        </details>
+        </dl>
       )}
+
+      <details className="mt-5">
+        <summary className="cursor-pointer text-xs text-paper-400 hover:text-paper-200">
+          Provenance
+        </summary>
+        <dl className="mt-3 space-y-1.5 border-l border-line pl-4">
+          <Row label="sha256" value={asset.sha256} mono />
+          <Row label="measured by" value={asset.inspector} />
+          <Row label="tool version" value={asset.inspector_version} mono />
+          <Row label="custody" value={asset.custody_state} />
+          <Row label="original is immutable" value={asset.immutable} />
+        </dl>
+      </details>
     </div>
   );
+}
+
+function Row({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: unknown;
+  mono?: boolean;
+}) {
+  if (value === null || value === undefined || value === "") return null;
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b border-line/60 pb-1">
+      <dt className="text-xs text-paper-400">{humanise(label)}</dt>
+      <dd
+        className={`text-right text-[13px] text-paper-100 ${
+          mono || typeof value === "number" ? "font-mono" : ""
+        }`}
+      >
+        {String(value)}
+      </dd>
+    </div>
+  );
+}
+
+/** camelCase property names are for the wire, not for a person reading a page. */
+function humanise(key: string): string {
+  return key
+    .replace(/([A-Z])/g, " $1")
+    .replace(/^./, (c) => c.toUpperCase())
+    .replace(/ Px$/, " (px)")
+    .replace(/ Bps$/, " (bps)")
+    .replace(/ Lufs$/, " (LUFS)")
+    .replace(/ Dbtp$/, " (dBTP)")
+    .replace(/ Hz$/, " (Hz)")
+    .replace(/ Lu$/, " (LU)")
+    .trim();
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  if (bytes < 1024 * 1024 * 1024) return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(2)} GB`;
+}
+
+function guessType(filename: string): string {
+  const ext = filename.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "mov":
+      return "video/quicktime";
+    case "mp4":
+      return "video/mp4";
+    case "vtt":
+      return "text/vtt";
+    case "srt":
+      return "application/x-subrip";
+    case "png":
+      return "image/png";
+    default:
+      return "image/jpeg";
+  }
 }
