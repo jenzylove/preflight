@@ -19,7 +19,8 @@ Parallel track.
 
 ## Status
 
-Deployed and working end to end in the browser. Gates 0 through 7 are complete:
+Deployed and working end to end in the browser, with the full product
+interface built. Gates 0 through 7 are complete:
 the transaction is proven, the schema and state machines enforce the safety
 properties, retrieval and extraction run live against real destinations, and
 the worker, validator, packages, passports and delivery rooms are built,
@@ -41,6 +42,14 @@ The verified run uploads a 72 MB QuickTime master, measures it in the worker,
 retrieves Artdocfest's published requirements, corrects loudness and subtitle
 format, re-measures the built package independently, issues a passport and
 opens a delivery room a recipient can use.
+
+The interface has two registers. The public page is cinematic: one finished
+frame comes apart into picture, audio, subtitles and metadata, the
+destination's specification arrives as a plane that did not come from the film,
+and the whole thing resolves into a package carrying its own evidence. The
+workspace is the opposite - quiet, technical, and built so that a published
+requirement always sits beside the measured reality rather than collapsing into
+a score.
 
 Reproduce it:
 

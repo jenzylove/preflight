@@ -58,6 +58,9 @@ ignore = [
 "packages/contracts/preflight_contracts/repairs.py" = ["S603"]
 # "PASS" is an assertion result, not a credential.
 "packages/contracts/preflight_contracts/compare.py" = ["S105"]
+# Grain and halation on a synthesised film frame. The randomness here is
+# texture, not a secret.
+"scripts/make_landing_still.py" = ["S311"]
 # The deployed end-to-end test calls fixed https endpoints it defines
 # itself; there is no user-supplied URL for a scheme check to protect.
 "scripts/*" = ["S603", "S607", "S310"]
