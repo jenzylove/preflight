@@ -29,6 +29,7 @@ from preflight_contracts.rules import (
 )
 
 from .models import Destination, RulePackRow, RuleRow, SourceEvidenceRow
+from .normalise import normalise_pack
 
 #: Statuses a rule pack moves through. Only CONFIRMED packs are ever compared
 #: against a film.
@@ -144,12 +145,17 @@ def load_project_rule_packs(
             if _needs_confirmation(rule_row):
                 unconfirmed.add(rule.rule_id)
 
-        packs.append(RulePack(
+        raw = RulePack(
             destination_id=destination.slug,
             version=pack_row.version,
             rules=rules,
             evidence=evidence,
-        ))
+        )
+        # Extraction reads specification tables row by row, which turns a menu
+        # of delivery options into a set of contradictory mandates. Fold them
+        # back before anything is measured against them.
+        normalised, _notes = normalise_pack(raw)
+        packs.append(normalised)
 
     return packs, evidence_lookup, unconfirmed
 

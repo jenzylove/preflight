@@ -70,6 +70,10 @@ class Project(Base):
     runtime_seconds: Mapped[int | None] = mapped_column(Integer)
     country_of_origin: Mapped[str | None] = mapped_column(String(2))
     internal_code: Mapped[str | None] = mapped_column(String(100))
+    #: Delivery metadata destinations ask for. Held on the project because it
+    #: describes the film, not any one file, and because rules about it would
+    #: otherwise be permanently unmeasurable.
+    synopsis: Mapped[str | None] = mapped_column(Text)
     state: Mapped[str] = mapped_column(String(40), nullable=False, default="DRAFT")
     created_at: Mapped[datetime] = _created()
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
@@ -99,6 +103,10 @@ class Asset(Base):
     sha256: Mapped[str | None] = mapped_column(String(64), index=True)
     immutable: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     custody_state: Mapped[str] = mapped_column(String(40), nullable=False, default="STORED")
+    #: What language this asset is in, when the user tells us. A subtitle file
+    #: rarely declares its own language, and guessing it from the film's
+    #: primary language would be a fabricated measurement.
+    declared_language: Mapped[str | None] = mapped_column(String(20))
     derived_from_id: Mapped[uuid.UUID | None] = mapped_column(
         ForeignKey("assets.id", ondelete="SET NULL")
     )

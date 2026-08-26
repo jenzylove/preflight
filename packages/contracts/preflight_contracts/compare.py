@@ -83,6 +83,8 @@ def _describe(rule: Rule) -> str:
     op, val = rule.operator, rule.value
     if op is Operator.BETWEEN:
         return f"between {val[0]} and {val[1]}"
+    if op is Operator.ANY_OF_RANGES:
+        return "any of " + " or ".join(f"{lo}-{hi}" for lo, hi in val)
     if op is Operator.IN:
         return "one of " + ", ".join(str(v) for v in val)
     if op is Operator.NOT_IN:
@@ -115,6 +117,8 @@ def _satisfied(rule: Rule, measured: Any) -> bool:
         return float(measured) <= float(expected)
     if op is Operator.BETWEEN:
         return float(expected[0]) <= float(measured) <= float(expected[1])
+    if op is Operator.ANY_OF_RANGES:
+        return any(float(lo) <= float(measured) <= float(hi) for lo, hi in expected)
     if op is Operator.IN:
         return _norm(measured) in {_norm(v) for v in expected}
     if op is Operator.NOT_IN:
@@ -331,6 +335,12 @@ mutually_exclusive = _mutually_exclusive
 
 def _numeric_range(rule: Rule) -> tuple[float, float] | None:
     inf = float("inf")
+    if rule.operator is Operator.ANY_OF_RANGES:
+        # The span the rule permits overall. Two alternative-tier rules only
+        # conflict if their whole spans are disjoint.
+        lows = [float(w[0]) for w in rule.value]
+        highs = [float(w[1]) for w in rule.value]
+        return min(lows), max(highs)
     if rule.operator is Operator.BETWEEN:
         return float(rule.value[0]), float(rule.value[1])
     if rule.operator is Operator.GTE:

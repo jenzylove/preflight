@@ -42,6 +42,10 @@ class UploadIntent(BaseModel):
     filename: str = Field(min_length=1, max_length=500)
     content_type: str = Field(max_length=120)
     byte_size: int = Field(gt=0)
+    #: Optional, and only ever what the user tells us. A subtitle file rarely
+    #: declares its own language, and taking the film's primary language as the
+    #: subtitle's would be a measurement nobody made.
+    language: str | None = Field(default=None, max_length=20)
 
 
 class UploadIntentOut(BaseModel):
@@ -94,6 +98,7 @@ def create_upload_intent(
         byte_size=payload.byte_size,
         immutable=True,
         custody_state="AWAITING_UPLOAD",
+        declared_language=payload.language,
     )
     session.add(asset)
     session.flush()

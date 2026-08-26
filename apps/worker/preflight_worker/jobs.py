@@ -246,7 +246,16 @@ def _build_and_validate(
 
     # Independent: measures what was written, shares no state with the executor.
     report = validate_package(
-        package_dir, pack, ambiguous_rule_ids=ambiguous, rule_pack_version_pinned=True
+        package_dir, pack,
+        ambiguous_rule_ids=ambiguous,
+        rule_pack_version_pinned=True,
+        project_metadata={
+            "title": project.title or None,
+            "language": project.primary_language or None,
+            "runtimeSeconds": project.runtime_seconds,
+            "countryOfOrigin": project.country_of_origin or None,
+            "synopsisChars": len(project.synopsis) if project.synopsis else None,
+        },
     )
 
     archive = storage.write_zip(package_dir, work / "zip" / f"{pack.destination_id}.zip")

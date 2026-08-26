@@ -23,6 +23,7 @@ from preflight_contracts.compare import (
     find_conflicts,
     is_ready,
 )
+from preflight_contracts.normalise import deduplicate_conflicts
 from preflight_contracts.plan import OPERATION_CATALOGUE, Plan, build_plan
 from preflight_contracts.rules import AssetType, Severity
 from preflight_contracts.state import ProjectState, TransitionError, transition_project
@@ -114,29 +115,59 @@ class PreflightOut(BaseModel):
 # ---------------------------------------------------------------------------
 
 def _measured_properties(project_id: uuid.UUID, session: Session) -> dict[AssetType, dict]:
-    """Collect the latest measurement for each asset role.
+    """Everything Preflight has actually measured or been told, by asset type.
 
-    Every value here came from a tool. Nothing is defaulted or inferred — an
-    absent property stays absent so the engine reports NOT_MEASURED rather
-    than silently passing.
+    Metadata comes from the project record rather than a file, because that is
+    where a title, a synopsis and a runtime genuinely live. Deriving them means
+    rules about them can be evaluated instead of sitting permanently
+    unmeasured; nothing is invented, and a field the user has not supplied
+    stays absent.
     """
-    rows = session.execute(
-        select(Asset, AssetEvidence)
-        .join(AssetEvidence, AssetEvidence.asset_id == Asset.id)
-        .where(Asset.project_id == project_id, Asset.deleted_at.is_(None))
-        .order_by(AssetEvidence.created_at)
-    ).all()
+    from ..core.models import Asset, Project
 
     measured: dict[AssetType, dict] = {}
-    for asset, evidence in rows:
+
+    assets = session.scalars(
+        select(Asset).where(
+            Asset.project_id == project_id, Asset.deleted_at.is_(None)
+        )
+    ).all()
+
+    for asset in assets:
+        evidence = session.scalar(
+            select(AssetEvidence)
+            .where(AssetEvidence.asset_id == asset.id)
+            .order_by(AssetEvidence.created_at.desc())
+        )
+        if evidence is None:
+            continue
         properties = evidence.measured_properties_json or {}
+
         if asset.role == "master":
-            measured[AssetType.VIDEO] = properties.get("video", {})
-            measured[AssetType.AUDIO] = properties.get("audio", {})
+            if properties.get("video"):
+                measured[AssetType.VIDEO] = properties["video"]
+            if properties.get("audio"):
+                measured[AssetType.AUDIO] = properties["audio"]
         elif asset.role == "subtitle":
-            measured[AssetType.SUBTITLE] = properties
+            subtitle = dict(properties)
+            if asset.declared_language:
+                subtitle["language"] = asset.declared_language
+            measured[AssetType.SUBTITLE] = subtitle
         elif asset.role == "poster":
             measured[AssetType.POSTER] = properties
+
+    project = session.get(Project, project_id)
+    if project is not None:
+        metadata = {
+            "title": project.title or None,
+            "language": project.primary_language or None,
+            "runtimeSeconds": project.runtime_seconds,
+            "countryOfOrigin": project.country_of_origin or None,
+            "synopsisChars": len(project.synopsis) if project.synopsis else None,
+        }
+        if any(v is not None for v in metadata.values()):
+            measured[AssetType.METADATA] = metadata
+
     return measured
 
 
@@ -310,7 +341,7 @@ def run_preflight(
         run_id=run.id,
         comparison_digest=run.comparison_digest,
         destinations=matrices,
-        conflicts=find_conflicts(packs),
+        conflicts=deduplicate_conflicts(find_conflicts(packs)),
         plan=_plan_out(plan, project.runtime_seconds or 60, roles, plan_row, session),
         limitations=_limitations(plan, matrices),
     )

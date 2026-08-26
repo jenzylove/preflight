@@ -53,6 +53,11 @@ class Operator(str, Enum):
     NOT_IN = "not_in"
     PRESENT = "present"     # the field must exist and be non-empty
     ABSENT = "absent"
+    #: Value must fall inside one of several ranges. Produced when a
+    #: destination publishes alternative delivery tiers - SD, HD, 2K, 4K -
+    #: each with its own bitrate window. Flattening those into separate
+    #: mandatory rules would demand a file be 15 Mbps and 90 Mbps at once.
+    ANY_OF_RANGES = "any_of_ranges"
 
 
 class AssetType(str, Enum):
@@ -179,6 +184,16 @@ def _validate_value(operator: Operator, value: Any) -> None:
         if value not in (None, True):
             raise RuleRejected(f"operator {operator.value} takes no value, got {value!r}")
         return
+    if operator is Operator.ANY_OF_RANGES:
+        if not (isinstance(value, (list, tuple)) and value):
+            raise RuleRejected("operator 'any_of_ranges' requires a list of ranges")
+        for window in value:
+            if not (isinstance(window, (list, tuple)) and len(window) == 2):
+                raise RuleRejected("each range must be [lo, hi]")
+            if float(window[0]) > float(window[1]):
+                raise RuleRejected(f"range bounds inverted: {window}")
+        return
+
     if operator is Operator.BETWEEN:
         if not (isinstance(value, (list, tuple)) and len(value) == 2):
             raise RuleRejected("operator 'between' requires exactly [lo, hi]")

@@ -103,6 +103,22 @@ def measure_package(package_dir: Path) -> dict[AssetType, dict]:
             # AC-7 case: the worker succeeded, the file is unusable.
             logger.warning("output %s could not be measured: %s", path.name, exc)
 
+    # Package-level properties are read from the directory that was built, not
+    # asserted. A rule about naming or checksums is measurable precisely
+    # because there is now a package to measure.
+    files = [
+        p for p in sorted(package_dir.rglob("*"))
+        if p.is_file() and p.name != "manifest.json"
+    ]
+    if files:
+        nested = any(p.parent != package_dir for p in files)
+        measured[AssetType.PACKAGE] = {
+            "fileNamePattern": files[0].name,
+            "folderLayout": "nested" if nested else "flat",
+            "checksumAlgorithm": "sha256" if (package_dir / "manifest.json").exists()
+            else None,
+        }
+
     return measured
 
 
@@ -148,15 +164,20 @@ def validate_package(
     *,
     ambiguous_rule_ids: frozenset[str] = frozenset(),
     rule_pack_version_pinned: bool = True,
+    project_metadata: dict[str, Any] | None = None,
 ) -> ValidationReport:
     """Decide whether a built package may be called verified.
 
-    Every input to the decision is measured here. Nothing is inherited from the
-    preflight run that planned the work.
+    Every file property is measured here, from the package on disk. Project
+    metadata is passed in because it lives in the database rather than in a
+    file - it is still recorded state rather than an assumption, and rules
+    about a title or a runtime would otherwise be permanently unevaluable.
     """
     report = ValidationReport(destination_id=pack.destination_id)
 
     measured = measure_package(package_dir)
+    if project_metadata:
+        measured[AssetType.METADATA] = project_metadata
     report.measured = {k.value: v for k, v in measured.items()}
 
     report.assertions = [

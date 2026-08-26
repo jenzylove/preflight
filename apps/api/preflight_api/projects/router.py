@@ -29,6 +29,7 @@ class ProjectCreate(BaseModel):
     runtime_seconds: int | None = Field(default=None, ge=0, le=60 * 60 * 12)
     country_of_origin: str | None = Field(default=None, min_length=2, max_length=2)
     internal_code: str | None = Field(default=None, max_length=100)
+    synopsis: str | None = Field(default=None, max_length=5000)
 
 
 class ProjectOut(BaseModel):
@@ -38,6 +39,7 @@ class ProjectOut(BaseModel):
     primary_language: str | None
     runtime_seconds: int | None
     country_of_origin: str | None
+    synopsis_chars: int | None
     state: str
     created_at: datetime
 
@@ -50,6 +52,7 @@ class ProjectOut(BaseModel):
             primary_language=project.primary_language,
             runtime_seconds=project.runtime_seconds,
             country_of_origin=project.country_of_origin,
+            synopsis_chars=len(project.synopsis) if project.synopsis else None,
             state=project.state,
             created_at=project.created_at,
         )
@@ -69,6 +72,7 @@ def create_project(
         runtime_seconds=payload.runtime_seconds,
         country_of_origin=payload.country_of_origin,
         internal_code=payload.internal_code,
+        synopsis=payload.synopsis,
         state=ProjectState.DRAFT.value,
     )
     session.add(project)
