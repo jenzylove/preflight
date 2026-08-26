@@ -22,10 +22,50 @@ import {
  * a second marketing page.
  */
 export default function SignInPage() {
+  // The form reads a query parameter, so it suspends. A null fallback would
+  // ship a blank page until JavaScript arrives; this renders the same frame
+  // and heading immediately, so there is something real on screen and something
+  // for a screen reader to announce.
   return (
-    <Suspense fallback={null}>
+    <Suspense fallback={<SignInFrame />}>
       <SignIn />
     </Suspense>
+  );
+}
+
+/** The static half of the page: backdrop, wordmark, heading. */
+function SignInFrame({ children }: { children?: React.ReactNode }) {
+  return (
+    <main
+      id="main"
+      className="relative flex min-h-screen items-center justify-center px-6 py-16"
+    >
+      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/film/still.jpg"
+          alt=""
+          className="still h-full w-full object-cover opacity-[0.16]"
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-ink-000 via-ink-000/85 to-ink-000" />
+      </div>
+
+      <div className="relative w-full max-w-sm">
+        <Link href="/" className="font-display text-xl text-paper-000">
+          Preflight
+        </Link>
+        {children ?? (
+          <>
+            <h1 className="mt-8 font-display text-3xl leading-tight text-paper-000">
+              Sign in
+            </h1>
+            <p className="mt-3 text-sm leading-relaxed text-paper-300">
+              Sign in to prepare a finished film for delivery.
+            </p>
+          </>
+        )}
+      </div>
+    </main>
   );
 }
 
@@ -69,24 +109,8 @@ function SignIn() {
   }
 
   return (
-    <main id="main" className="relative flex min-h-screen items-center justify-center px-6 py-16">
-      {/* The frame from the landing page, pushed well back. It keeps the two
-          surfaces feeling like one product without competing with the form. */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/film/still.jpg"
-          alt=""
-          className="still h-full w-full object-cover opacity-[0.16]"
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-ink-000 via-ink-000/85 to-ink-000" />
-      </div>
-
-      <div className="relative w-full max-w-sm">
-        <Link href="/" className="font-display text-xl text-paper-000">
-          Preflight
-        </Link>
-
+    <SignInFrame>
+      <>
         <h1 className="mt-8 font-display text-3xl leading-tight text-paper-000">
           {mode === "up" ? "Create your account" : "Welcome back"}
         </h1>
@@ -163,8 +187,8 @@ function SignIn() {
             unavailable.
           </p>
         )}
-      </div>
-    </main>
+      </>
+    </SignInFrame>
   );
 }
 
