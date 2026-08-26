@@ -165,6 +165,7 @@ def validate_package(
     ambiguous_rule_ids: frozenset[str] = frozenset(),
     rule_pack_version_pinned: bool = True,
     project_metadata: dict[str, Any] | None = None,
+    declared: dict[AssetType, dict[str, Any]] | None = None,
 ) -> ValidationReport:
     """Decide whether a built package may be called verified.
 
@@ -178,6 +179,14 @@ def validate_package(
     measured = measure_package(package_dir)
     if project_metadata:
         measured[AssetType.METADATA] = project_metadata
+
+    # Facts the user supplied that a file does not carry. A subtitle sidecar
+    # does not record its own language, so re-measuring the package would lose
+    # what the uploader told us and report it as never measured.
+    for asset_type, properties in (declared or {}).items():
+        merged = dict(measured.get(asset_type, {}))
+        merged.update({k: v for k, v in properties.items() if v is not None})
+        measured[asset_type] = merged
     report.measured = {k.value: v for k, v in measured.items()}
 
     report.assertions = [

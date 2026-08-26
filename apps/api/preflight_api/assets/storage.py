@@ -118,7 +118,37 @@ def create_download_url(key: str, filename: str) -> str:
         expiration=timedelta(seconds=settings.signed_url_ttl_seconds),
         method="GET",
         response_disposition=f'attachment; filename="{safe_filename}"',
+        **_signing_credentials(),
     )
+
+
+def _signing_credentials() -> dict[str, str]:
+    """What V4 signing needs when there is no private key on disk.
+
+    On Cloud Run the runtime identity comes from the metadata server and holds
+    no key material, so the library cannot sign locally. It can instead ask IAM
+    to sign on the service account's behalf, which is why the account carries
+    serviceAccountTokenCreator. A key file mounted into the container would
+    also work and would be a worse idea: it would put a long-lived credential
+    on disk in the service that faces the internet.
+
+    Returns nothing when the credentials can already sign - locally, where a
+    key file is configured - so the same code path works in both places.
+    """
+    import google.auth
+    import google.auth.transport.requests
+
+    credentials, _ = google.auth.default()
+
+    if hasattr(credentials, "signer_email") and getattr(credentials, "signer", None):
+        return {}
+
+    credentials.refresh(google.auth.transport.requests.Request())
+    email = getattr(credentials, "service_account_email", None)
+    if not email or email == "default":
+        raise StorageError("no service account identity available to sign with")
+
+    return {"service_account_email": email, "access_token": credentials.token}
 
 
 def object_exists(key: str) -> tuple[bool, int]:

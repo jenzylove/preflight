@@ -19,48 +19,44 @@ Parallel track.
 
 ## Status
 
-Deployed and running.
+Deployed and working end to end in the browser. Gates 0 through 7 are complete:
+the transaction is proven, the schema and state machines enforce the safety
+properties, retrieval and extraction run live against real destinations, and
+the worker, validator, packages, passports and delivery rooms are built,
+deployed and exercised against real media.
 
-- **Web** — <https://preflight-web-584136898465.us-central1.run.app>
-- **API** — <https://preflight-api-584136898465.us-central1.run.app> ([docs](https://preflight-api-584136898465.us-central1.run.app/docs))
+- Frontend: <https://preflight-web-584136898465.us-central1.run.app>
+- API: <https://preflight-api-584136898465.us-central1.run.app>
 
-Gates 0 through 7 are complete: the transaction is proven, the schema and state
-machines enforce the safety properties, retrieval and extraction have run live
-against real destinations and their output is persisted, and the API, worker and
-web app are deployed on Cloud Run against Cloud SQL.
-
-Measured, not asserted:
+Measured against the deployed system, not locally:
 
 ```
 mean extraction recall vs. human transcription   96%
-rules retrieved and persisted                    193 across 2 destinations
-                                                 (Artdocfest 121, Berlinale 72)
-mandatory rules                                  102
-assertions carrying a cited source               all of them
-cross-destination conflicts detected             17 hard, 5 soft
-original asset sha256                            unchanged
-decoded picture through metadata repair          bit-identical
-tests                                            162
+tests                                           190
+deployed end-to-end checks                       33
+packages reaching VERIFIED in deployment          1
 ```
 
-Claims about the deployed environment in this file are only made where they were
-verified there. `scripts/e2e_deployed.py` runs that verification: it signs up
-through Identity Platform, uploads a real MP4, and asserts against what the
-deployed services actually return.
+The verified run uploads a 72 MB QuickTime master, measures it in the worker,
+retrieves Artdocfest's published requirements, corrects loudness and subtitle
+format, re-measures the built package independently, issues a passport and
+opens a delivery room a recipient can use.
 
 Reproduce it:
 
 ```bash
-python scripts/gate0/make_fixture.py     # synthesise the malformed master
-python scripts/gate0/run_spike.py        # measure, compare, repair, re-measure
-python scripts/gate0/check_conflicts.py  # prove the destinations really conflict
-python scripts/gate3/run_extraction.py   # live retrieval + extraction, scored
-python scripts/e2e_deployed.py           # the deployed system, end to end
+python scripts/gate0/make_fixture.py              # a deliberately broken master
+python scripts/gate0/run_spike.py                 # measure, compare, repair, re-measure
+python scripts/gate0/check_conflicts.py           # prove the destinations really conflict
+python scripts/gate3/run_extraction.py            # live retrieval + extraction, scored
+python scripts/gate0/make_deliverable_fixture.py  # a master built to be delivered
+python scripts/e2e_verified.py                    # that master, through the deployed stack
 python -m pytest -q
 ```
 
-The first three need `ffmpeg` and `ffprobe` on PATH. The fourth needs
-`PARALLEL_API_KEY` and a Google Cloud project in `.env` — see `.env.example`.
+The Gate 0 scripts need `ffmpeg` and `ffprobe` on PATH. The extraction and
+deployed scripts need `PARALLEL_API_KEY` and a Google Cloud project in `.env` -
+see `.env.example`.
 
 ---
 
@@ -112,6 +108,11 @@ Green operations: EBU R128 two-pass loudness normalisation (linear mode, so the
 mix is moved rather than reshaped), container and display-metadata rewrite with
 `-c copy`, subtitle format conversion, poster pad-fit, metadata normalisation,
 SHA-256 manifests.
+
+Extraction reads published specifications well but not perfectly, so a project
+owner can set a requirement aside with a reason. That is deliberately not a
+delete: the rule stays in the pack as context, the decision is attributed and
+dated, and it appears in the passport as a stated limitation.
 
 Re-encoding the picture is yellow — always. When Artdocfest mandates 20–30 Mbps
 and your master is 8 Mbps, Preflight tells you, cites the sentence, and stops.

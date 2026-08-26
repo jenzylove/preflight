@@ -27,7 +27,7 @@ from typing import Any
 
 from preflight_contracts import repairs
 from preflight_contracts.plan import OPERATION_CATALOGUE, Safety
-from preflight_contracts.rules import RulePack
+from preflight_contracts.rules import AssetType, RulePack
 from preflight_contracts.state import JobState, PackageState
 
 from . import storage
@@ -193,6 +193,10 @@ def process_job(job_id: uuid.UUID, session) -> dict[str, Any]:
                 ambiguous=frozenset(ambiguous),
                 session=session,
                 derived_records=derived_records,
+                declared={
+                    a.role: {"language": a.declared_language}
+                    for a in assets if a.declared_language
+                },
             )
             packages_out.append(record)
 
@@ -223,6 +227,7 @@ def _build_and_validate(
     ambiguous: frozenset[str],
     session,
     derived_records: list[dict[str, Any]],
+    declared: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Assemble one destination's package and decide whether it may verify."""
     from preflight_contracts.models import Destination, Package
@@ -249,6 +254,9 @@ def _build_and_validate(
         package_dir, pack,
         ambiguous_rule_ids=ambiguous,
         rule_pack_version_pinned=True,
+        declared={
+            AssetType.SUBTITLE: declared["subtitle"],
+        } if (declared or {}).get("subtitle") else None,
         project_metadata={
             "title": project.title or None,
             "language": project.primary_language or None,

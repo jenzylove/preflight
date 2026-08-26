@@ -27,7 +27,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURE_DIR = ROOT / "packages" / "fixtures" / "deliverable"
 
-DURATION = 60          # one full staircase cycle: enough for a stable LRA
+DURATION = 24          # one full staircase cycle, kept short enough to upload
 WIDTH, HEIGHT = 1920, 1080
 FRAME_RATE = 25
 VIDEO_BITRATE = "24M"  # inside the published 20-30 Mbps FullHD window
@@ -60,7 +60,7 @@ def make_master(path: Path) -> None:
             # programme mean, so two extremes measure as almost no range at
             # all; a graded spread is what produces a real loudness range.
             "-filter_complex",
-            "[1:a]volume='0.9*pow(0.5,floor(mod(t,60)/6))':eval=frame,"
+            "[1:a]volume='0.9*pow(0.5,floor(mod(t,24)/2.4))':eval=frame,"
             "aresample=48000[a]",
             "-map", "0:v", "-map", "[a]",
             "-c:v", "libx264", "-profile:v", "high", "-preset", "veryfast",
@@ -74,7 +74,7 @@ def make_master(path: Path) -> None:
             "-movflags", "+faststart",
             str(path),
         ],
-        f"master.mp4 - {WIDTH}x{HEIGHT}p{FRAME_RATE}, {VIDEO_BITRATE}, AC-3 320k",
+        f"master.mov - {WIDTH}x{HEIGHT}p{FRAME_RATE}, {VIDEO_BITRATE}, AC-3 320k",
     )
 
 
@@ -109,7 +109,7 @@ def main() -> None:
     FIXTURE_DIR.mkdir(parents=True, exist_ok=True)
     print(f"generating deliverable fixture in {FIXTURE_DIR}")
 
-    make_master(FIXTURE_DIR / "master.mp4")
+    make_master(FIXTURE_DIR / "master.mov")
     make_subtitles(FIXTURE_DIR / "subtitles.vtt")
     make_poster(FIXTURE_DIR / "poster.jpg")
 

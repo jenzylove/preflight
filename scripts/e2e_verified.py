@@ -104,7 +104,7 @@ MISREADS = [
 def main() -> int:
     print(f"deliverable master -> VERIFIED, against {API}\n")
 
-    master = FIXTURE / "master.mp4"
+    master = FIXTURE / "master.mov"
     if not master.exists():
         raise SystemExit("run scripts/gate0/make_deliverable_fixture.py first")
 
@@ -134,7 +134,7 @@ def main() -> int:
 
     print("\nUPLOAD")
     for role, filename, content_type, language in [
-        ("master", "master.mp4", "video/mp4", None),
+        ("master", "master.mov", "video/quicktime", None),
         ("subtitle", "subtitles.vtt", "text/vtt", "en"),
         ("poster", "poster.jpg", "image/jpeg", None),
     ]:
