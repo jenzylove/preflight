@@ -3,18 +3,22 @@
 import Link from "next/link";
 import { use, useCallback, useEffect, useState } from "react";
 
-import { Shell } from "@/components/Shell";
-import { api, type DeliveryRoom, type PackageSummary } from "@/lib/api";
+import { StatusChip } from "@/components/Status";
+import { ProjectRail } from "@/components/workspace/Rail";
+import { Workspace } from "@/components/workspace/Workspace";
+import { api } from "@/lib/api";
+import type { DeliveryRoom, PackageSummary, Project } from "@/lib/types";
 
 /**
- * Packages, and the delivery rooms that share them.
+ * What was produced, and whether it survived being checked again.
  *
- * One package per destination. Where destinations conflict, the difference
- * between the packages is the product working — so they are listed separately
- * rather than merged into a single "output".
+ * One package per destination. Where two destinations want incompatible
+ * things, two packages exist, and the reason is on the screen rather than left
+ * for the user to infer from a duplicate row.
  *
- * A delivery room can only be created for a VERIFIED package. The button is
- * absent otherwise, and the API refuses regardless.
+ * A package that did not verify is not a failure state to be softened. It is
+ * the product working: something remains unresolved, it is named, and nothing
+ * claims to be ready.
  */
 export default function PackagesPage({
   params,
@@ -23,261 +27,396 @@ export default function PackagesPage({
 }) {
   const { projectId } = use(params);
   return (
-    <Shell>
+    <Workspace wide>
       <Packages projectId={projectId} />
-    </Shell>
+    </Workspace>
   );
 }
 
 function Packages({ projectId }: { projectId: string }) {
-  const [packages, setPackages] = useState<PackageSummary[] | null>(null);
+  const [project, setProject] = useState<Project | null>(null);
+  const [packages, setPackages] = useState<PackageSummary[]>([]);
   const [rooms, setRooms] = useState<DeliveryRoom[]>([]);
-  const [issued, setIssued] = useState<Record<string, string>>({});
-  const [error, setError] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    try {
-      const [p, r] = await Promise.all([
-        api.listPackages(projectId),
-        api.listRooms(projectId).catch(() => []),
-      ]);
-      setPackages(p);
-      setRooms(r);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not load packages.");
-    }
+    const [p, pkgs, existing] = await Promise.all([
+      api.getProject(projectId),
+      api.listPackages(projectId).catch(() => [] as PackageSummary[]),
+      api.listRooms(projectId).catch(() => [] as DeliveryRoom[]),
+    ]);
+    setProject(p);
+    setPackages(pkgs);
+    setRooms(existing);
   }, [projectId]);
 
   useEffect(() => {
-    load();
+    load().catch((caught) =>
+      setError(caught instanceof Error ? caught.message : "Could not load packages."),
+    );
   }, [load]);
 
-  async function createRoom(pkg: PackageSummary) {
-    setError("");
-    try {
-      const room = await api.createRoom(projectId, pkg.id, {
-        recipient_label: pkg.destination_name,
-        expires_in_hours: 168,
-      });
-      if (room.url_token) {
-        setIssued((s) => ({
-          ...s,
-          [pkg.id]: `${window.location.origin}/delivery/${room.url_token}`,
-        }));
-      }
-      load();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not create a delivery link.");
-    }
+  if (!project) {
+    return <p className="slate text-paper-400" role="status">Loading</p>;
   }
 
-  async function download(pkg: PackageSummary) {
-    try {
-      const { url } = await api.packageDownload(projectId, pkg.id);
-      window.open(url, "_blank", "noopener");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Download is unavailable.");
-    }
-  }
-
-  if (!packages) {
-    return (
-      <main className="mx-auto max-w-3xl px-6 py-12">
-        <p className="text-neutral-500">Loading…</p>
-      </main>
-    );
-  }
+  const verified = packages.filter((p) => p.verified);
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-neutral-100">Packages</h1>
-      <p className="mt-2 text-sm text-neutral-400">
-        One package per destination, each measured again after it was built.
-      </p>
+    <>
+      <ProjectRail project={project} />
+
+      <div className="mb-8">
+        <h2 className="font-display text-2xl text-paper-000">
+          {packages.length === 0
+            ? "Nothing has been built yet"
+            : "Rechecked, from the files themselves"}
+        </h2>
+        <p className="mt-3 max-w-measure text-[15px] leading-relaxed text-paper-300">
+          Preflight does not take the worker&rsquo;s word for it. Every package
+          below was re-opened after it was built and measured again from
+          scratch, against the same published requirements.
+        </p>
+      </div>
 
       {error && (
-        <p role="alert" className="mt-4 text-sm text-rose-400">
+        <p role="alert" className="border-l-2 border-stop bg-stop-bg/40 py-3 pl-4 text-paper-100">
           {error}
         </p>
       )}
 
-      {packages.length === 0 && (
-        <div className="mt-8 rounded-lg border border-dashed border-neutral-800 p-8 text-center">
-          <p className="text-neutral-300">No packages have been built yet.</p>
-          <Link
-            href={`/projects/${projectId}/plan`}
-            className="mt-2 inline-block text-sm text-sky-400 underline"
-          >
-            Review and approve the repair plan
-          </Link>
-        </div>
+      {packages.length === 0 && !error && (
+        <p className="text-paper-300">
+          Approve a repair plan and run it to produce packages.
+        </p>
       )}
 
-      <div className="mt-6 space-y-5">
+      {packages.length > 1 && (
+        <p className="mb-6 rounded-[3px] border border-line bg-ink-100 px-4 py-3 text-sm text-paper-300">
+          These destinations require different deliverables, so each gets its
+          own package built from your master.
+        </p>
+      )}
+
+      <div className="space-y-6">
         {packages.map((pkg) => (
-          <section
+          <PackageCard
             key={pkg.id}
-            className="rounded-lg border border-neutral-800 bg-neutral-950 p-5"
-          >
-            <header className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-lg font-medium text-neutral-100">
-                {pkg.destination_name}
-              </h2>
-              <span
-                className={`rounded px-2 py-0.5 text-xs font-medium ring-1 ring-inset ${
-                  pkg.verified
-                    ? "bg-emerald-950 text-emerald-300 ring-emerald-800"
-                    : "bg-amber-950 text-amber-300 ring-amber-800"
-                }`}
-              >
-                {pkg.verified ? "Meets published requirements" : pkg.state}
-              </span>
-            </header>
-
-            <p className="mt-1 text-xs text-neutral-500">
-              {pkg.requirements_satisfied} requirements satisfied
-              {pkg.rule_pack_version
-                ? ` · rule pack v${pkg.rule_pack_version} ${pkg.rule_pack_digest ?? ""}`
-                : ""}
-              {pkg.validator_version ? ` · validator ${pkg.validator_version}` : ""}
-            </p>
-
-            {pkg.package_sha256 && (
-              <p className="mt-2 break-all font-mono text-xs text-neutral-500">
-                package sha256 {pkg.package_sha256}
-              </p>
-            )}
-
-            {pkg.transformations.length > 0 && (
-              <details className="mt-3">
-                <summary className="cursor-pointer text-sm text-neutral-400 hover:text-neutral-200">
-                  What was changed ({pkg.transformations.length})
-                </summary>
-                <ul className="mt-2 space-y-2 border-l-2 border-neutral-800 pl-3">
-                  {pkg.transformations.map((t, i) => (
-                    <li key={i} className="text-xs">
-                      <span className="font-mono text-neutral-200">{t.operation}</span>
-                      {t.picture_preserved === true && (
-                        <span className="ml-2 text-emerald-400">
-                          picture unchanged
-                        </span>
-                      )}
-                      <div className="mt-0.5 text-neutral-500">
-                        {Object.entries(t.parameters)
-                          .map(([k, v]) => `${k}=${String(v)}`)
-                          .join(", ")}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-
-            {pkg.files.length > 0 && (
-              <details className="mt-2">
-                <summary className="cursor-pointer text-sm text-neutral-400 hover:text-neutral-200">
-                  Contents ({pkg.files.length} files)
-                </summary>
-                <ul className="mt-2 space-y-1 border-l-2 border-neutral-800 pl-3">
-                  {pkg.files.map((f) => (
-                    <li key={f.path} className="text-xs">
-                      <span className="text-neutral-300">{f.path}</span>
-                      <div className="break-all font-mono text-neutral-600">
-                        {f.sha256}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </details>
-            )}
-
-            {pkg.limitations.length > 0 && (
-              <div className="mt-3 rounded border border-amber-900/60 bg-amber-950/20 p-3">
-                <p className="text-xs font-medium text-amber-200">Not resolved</p>
-                <ul className="mt-1 space-y-0.5 text-xs text-neutral-300">
-                  {pkg.limitations.map((l, i) => (
-                    <li key={i}>{l}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {pkg.package_sha256 && (
-                <button
-                  onClick={() => download(pkg)}
-                  className="rounded border border-neutral-700 px-3 py-1.5 text-sm
-                             text-neutral-200 hover:border-neutral-500"
-                >
-                  Download
-                </button>
-              )}
-              {pkg.verified && (
-                <button
-                  onClick={() => createRoom(pkg)}
-                  className="rounded bg-neutral-100 px-3 py-1.5 text-sm font-medium
-                             text-neutral-950 hover:bg-white"
-                >
-                  Create delivery link
-                </button>
-              )}
-            </div>
-
-            {issued[pkg.id] && (
-              <div className="mt-3 rounded border border-sky-900 bg-sky-950/30 p-3">
-                <p className="text-xs text-sky-200">
-                  Copy this now — it is shown once and cannot be recovered.
-                </p>
-                <code className="mt-1 block break-all text-xs text-neutral-100">
-                  {issued[pkg.id]}
-                </code>
-              </div>
-            )}
-          </section>
+            pkg={pkg}
+            projectId={projectId}
+            rooms={rooms}
+            onChanged={load}
+          />
         ))}
       </div>
 
-      {rooms.length > 0 && (
-        <section className="mt-10 border-t border-neutral-900 pt-6">
-          <h2 className="text-sm font-medium uppercase tracking-wide text-neutral-500">
-            Delivery links
-          </h2>
-          <ul className="mt-3 space-y-2">
-            {rooms.map((room) => (
-              <li
-                key={room.room_id}
-                className="flex flex-wrap items-baseline justify-between gap-2
-                           rounded border border-neutral-800 p-3 text-sm"
-              >
-                <span className="text-neutral-300">
-                  {room.recipient_label ?? "Unlabelled"}
-                  <span className="ml-2 text-xs text-neutral-500">{room.state}</span>
-                </span>
-                {room.state === "active" && (
-                  <button
-                    onClick={async () => {
-                      await api.revokeRoom(projectId, room.room_id);
-                      load();
-                    }}
-                    className="text-xs text-rose-400 underline"
-                  >
-                    Revoke
-                  </button>
-                )}
-              </li>
-            ))}
-          </ul>
-        </section>
+      {verified.length > 0 && (
+        <div className="mt-10 flex justify-end">
+          <Link
+            href={`/projects/${projectId}/passport`}
+            className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium
+                       text-ink-000 transition hover:bg-white"
+          >
+            Open the release passport
+          </Link>
+        </div>
+      )}
+    </>
+  );
+}
+
+function PackageCard({
+  pkg,
+  projectId,
+  rooms,
+  onChanged,
+}: {
+  pkg: PackageSummary;
+  projectId: string;
+  rooms: DeliveryRoom[];
+  onChanged: () => Promise<void>;
+}) {
+  return (
+    <section className="rounded-[3px] border border-line bg-ink-100">
+      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-line px-5 py-4">
+        <div>
+          <h3 className="font-display text-lg text-paper-000">
+            {pkg.destination_name || pkg.destination_id}
+          </h3>
+          <p className="mt-1 text-sm text-paper-300">
+            {pkg.requirements_satisfied} requirements satisfied
+          </p>
+        </div>
+        {pkg.verified ? (
+          <StatusChip tone="ok">Ready against current published requirements</StatusChip>
+        ) : (
+          <StatusChip tone="act">Not ready</StatusChip>
+        )}
+      </header>
+
+      <div className="px-5 py-5">
+        {!pkg.verified && pkg.limitations.length > 0 && (
+          <div className="mb-5 rounded-[3px] border-l-2 border-review bg-review-bg/20 py-3 pl-4 pr-4">
+            <p className="text-sm text-paper-100">What is still outstanding</p>
+            <ul className="mt-2 space-y-1.5">
+              {pkg.limitations.map((limitation, index) => (
+                <li key={index} className="text-sm leading-relaxed text-paper-300">
+                  {limitation}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {pkg.transformations.length > 0 && (
+          <div className="mb-5">
+            <h4 className="slate mb-2 text-paper-400">What changed</h4>
+            <ul className="space-y-2">
+              {pkg.transformations.map((t, index) => (
+                <li key={index} className="text-sm">
+                  <span className="font-mono text-paper-100">{t.operation}</span>
+                  {t.picture_preserved === true && (
+                    <span className="ml-3 text-paper-300">
+                      picture bit-identical to your original
+                    </span>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {pkg.files.length > 0 && (
+          <div className="mb-5">
+            <h4 className="slate mb-2 text-paper-400">
+              {pkg.files.length} file{pkg.files.length === 1 ? "" : "s"}
+            </h4>
+            <ul className="space-y-1">
+              {pkg.files.map((file) => (
+                <li
+                  key={file.path}
+                  className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5
+                             border-b border-line/60 pb-1"
+                >
+                  <span className="font-mono text-[13px] text-paper-100">
+                    {file.path}
+                  </span>
+                  <span className="font-mono text-[11px] text-paper-500">
+                    {file.sha256.slice(0, 16)}…
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {pkg.verified && pkg.limitations.length > 0 && (
+          <details className="mb-5">
+            <summary className="cursor-pointer text-xs text-paper-400 hover:text-paper-200">
+              Stated limitations ({pkg.limitations.length})
+            </summary>
+            <ul className="mt-3 space-y-2 border-l border-line pl-4">
+              {pkg.limitations.map((limitation, index) => (
+                <li key={index} className="text-sm leading-relaxed text-paper-300">
+                  {limitation}
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
+
+        <details className="mb-5">
+          <summary className="cursor-pointer text-xs text-paper-400 hover:text-paper-200">
+            Provenance
+          </summary>
+          <dl className="mt-3 space-y-1.5 border-l border-line pl-4 text-xs">
+            <Row label="Package hash" value={pkg.package_sha256} mono />
+            <Row label="Rule pack" value={pkg.rule_pack_digest} mono />
+            <Row label="Rule pack version" value={pkg.rule_pack_version} />
+            <Row label="Checked by" value={pkg.validator_version} mono />
+            <Row label="State" value={pkg.state} />
+          </dl>
+        </details>
+
+        {pkg.verified && (
+          <Delivery
+            pkg={pkg}
+            projectId={projectId}
+            rooms={rooms}
+            onChanged={onChanged}
+          />
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Creating and managing a delivery room.
+ *
+ * The link is shown once. It is not recoverable afterwards because only its
+ * hash is stored, which is the property that makes a leaked database useless.
+ * Saying so at the moment of creation is more useful than explaining it later
+ * when someone asks where their link went.
+ */
+function Delivery({
+  pkg,
+  projectId,
+  rooms,
+  onChanged,
+}: {
+  pkg: PackageSummary;
+  projectId: string;
+  rooms: DeliveryRoom[];
+  onChanged: () => Promise<void>;
+}) {
+  const [label, setLabel] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [created, setCreated] = useState<DeliveryRoom | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const live = rooms.filter((room) => room.state === "active");
+
+  async function create() {
+    setBusy(true);
+    setError(null);
+    try {
+      const room = await api.createRoom(projectId, pkg.id, {
+        recipient_label: label || undefined,
+      });
+      setCreated(room);
+      await onChanged();
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "That link was not created.",
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revoke(roomId: string) {
+    try {
+      await api.revokeRoom(projectId, roomId);
+      await onChanged();
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Could not revoke that link.");
+    }
+  }
+
+  const url =
+    created?.url_token != null
+      ? `${typeof window === "undefined" ? "" : window.location.origin}/delivery/${created.url_token}`
+      : null;
+
+  return (
+    <div className="border-t border-line pt-5">
+      <h4 className="slate mb-3 text-paper-400">Send it</h4>
+
+      {url ? (
+        <div className="rounded-[3px] border border-line-strong bg-ink-000 p-4">
+          <p className="text-sm text-paper-100">
+            Copy this link now. It is shown once and cannot be shown again.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <code className="flex-1 overflow-x-auto whitespace-nowrap rounded-[3px]
+                             border border-line bg-ink-100 px-3 py-2 font-mono text-xs text-paper-100">
+              {url}
+            </code>
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard.writeText(url);
+                setCopied(true);
+              }}
+              className="rounded-[3px] border border-line-strong px-3.5 py-2 text-xs
+                         text-paper-100 transition hover:bg-ink-200"
+            >
+              {copied ? "Copied" : "Copy"}
+            </button>
+          </div>
+          <p className="mt-3 text-xs text-paper-400">{created?.note}</p>
+        </div>
+      ) : (
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-[14rem] flex-1">
+            <label htmlFor={`who-${pkg.id}`} className="slate block text-paper-400">
+              Who is this for (optional)
+            </label>
+            <input
+              id={`who-${pkg.id}`}
+              value={label}
+              onChange={(event) => setLabel(event.target.value)}
+              placeholder="Artdocfest programming"
+              className="mt-2 w-full rounded-[3px] border border-line bg-ink-000 px-3 py-2
+                         text-sm text-paper-000 outline-none placeholder:text-paper-500
+                         focus:border-line-strong"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={create}
+            disabled={busy}
+            className="rounded-[3px] border border-line-strong px-4 py-2 text-sm
+                       text-paper-100 transition hover:bg-ink-200 disabled:opacity-50"
+          >
+            {busy ? "Creating…" : "Create a delivery link"}
+          </button>
+        </div>
       )}
 
-      {packages.length > 0 && (
-        <Link
-          href={`/projects/${projectId}/passport`}
-          className="mt-8 inline-block text-sky-400 underline underline-offset-2"
-        >
-          Open the release passport
-        </Link>
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-stop">
+          {error}
+        </p>
       )}
-    </main>
+
+      {live.length > 0 && (
+        <ul className="mt-4 space-y-2">
+          {live.map((room) => (
+            <li
+              key={room.room_id}
+              className="flex flex-wrap items-center justify-between gap-3 border-b
+                         border-line/60 pb-2 text-sm"
+            >
+              <span className="text-paper-200">
+                {room.recipient_label || "Unlabelled link"}
+                <span className="ml-3 text-xs text-paper-400">
+                  expires {new Date(room.expires_at).toLocaleDateString()}
+                </span>
+              </span>
+              <button
+                type="button"
+                onClick={() => revoke(room.room_id)}
+                className="text-xs text-paper-400 transition hover:text-stop"
+              >
+                Revoke
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Row({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string | number | null;
+  mono?: boolean;
+}) {
+  if (value === null || value === undefined || value === "") return null;
+  return (
+    <div className="flex items-baseline justify-between gap-4">
+      <dt className="text-paper-400">{label}</dt>
+      <dd className={`break-all text-right text-paper-100 ${mono ? "font-mono" : ""}`}>
+        {String(value)}
+      </dd>
+    </div>
   );
 }

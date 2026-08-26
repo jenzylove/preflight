@@ -3,149 +3,214 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
-import { Shell } from "@/components/Shell";
+import { PageHead, Workspace } from "@/components/workspace/Workspace";
 import { api } from "@/lib/api";
 
-const TYPES = [
-  ["feature", "Feature"],
-  ["short", "Short"],
-  ["documentary", "Documentary"],
-  ["trailer", "Trailer"],
-  ["series", "Series episode"],
-  ["other", "Other"],
-] as const;
-
+/**
+ * Starting a delivery.
+ *
+ * Only what the backend genuinely uses. Runtime, language and country appear
+ * because destinations publish requirements about them; the synopsis appears
+ * because destinations ask for one and rules are measured against its length.
+ * Nothing here is collected to make the form feel substantial.
+ */
 export default function NewProjectPage() {
   return (
-    <Shell>
-      <NewProjectForm />
-    </Shell>
+    <Workspace>
+      <NewProject />
+    </Workspace>
   );
 }
 
-function NewProjectForm() {
+const TYPES = [
+  "documentary",
+  "feature",
+  "short",
+  "trailer",
+  "series",
+  "other",
+] as const;
+
+function NewProject() {
   const router = useRouter();
   const [title, setTitle] = useState("");
   const [type, setType] = useState<string>("documentary");
-  const [language, setLanguage] = useState("en");
-  const [runtime, setRuntime] = useState("");
+  const [language, setLanguage] = useState("");
   const [country, setCountry] = useState("");
-  const [error, setError] = useState("");
+  const [runtime, setRuntime] = useState("");
+  const [synopsis, setSynopsis] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
+  async function submit(event: React.FormEvent) {
+    event.preventDefault();
     setBusy(true);
-    setError("");
+    setError(null);
     try {
+      const minutes = Number.parseFloat(runtime);
       const project = await api.createProject({
-        title,
+        title: title.trim(),
         project_type: type,
-        primary_language: language || undefined,
-        // Runtime is entered in minutes because that is how films are
-        // discussed; the API stores seconds because that is how they are
-        // measured.
-        runtime_seconds: runtime ? Math.round(Number(runtime) * 60) : undefined,
-        country_of_origin: country ? country.toUpperCase() : undefined,
+        ...(language ? { primary_language: language.trim() } : {}),
+        ...(country ? { country_of_origin: country.trim().toUpperCase() } : {}),
+        ...(Number.isFinite(minutes) && minutes > 0
+          ? { runtime_seconds: Math.round(minutes * 60) }
+          : {}),
+        ...(synopsis.trim() ? { synopsis: synopsis.trim() } : {}),
       });
       router.push(`/projects/${project.id}/master`);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create the project.");
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "That project was not created.",
+      );
       setBusy(false);
     }
   }
 
-  const field =
-    "mt-1 w-full rounded border border-neutral-800 bg-neutral-900 px-3 py-2 " +
-    "text-neutral-100 focus:border-neutral-600 focus:outline-none";
-
   return (
-    <main className="mx-auto max-w-xl px-6 py-10">
-      <h1 className="text-2xl font-semibold text-neutral-100">New project</h1>
-      <p className="mt-2 text-sm text-neutral-400">
-        These details go into the delivery metadata and the release passport. You can
-        change them until a package is built.
-      </p>
+    <>
+      <PageHead
+        eyebrow="New delivery"
+        title="What are you delivering?"
+        lede="A few details destinations actually ask for. You can change any of them later."
+      />
 
-      <form onSubmit={submit} className="mt-8 space-y-4">
-        <label className="block">
-          <span className="text-sm text-neutral-400">Title</span>
-          <input
-            required
-            maxLength={300}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            className={field}
-            placeholder="A Quiet Field"
-          />
-        </label>
+      <form onSubmit={submit} className="max-w-xl space-y-6">
+        <Field
+          id="title"
+          label="Title"
+          value={title}
+          onChange={setTitle}
+          required
+          autoFocus
+        />
 
-        <label className="block">
-          <span className="text-sm text-neutral-400">Type</span>
+        <div>
+          <label htmlFor="type" className="slate block text-paper-300">
+            Type
+          </label>
           <select
+            id="type"
             value={type}
-            onChange={(e) => setType(e.target.value)}
-            className={field}
+            onChange={(event) => setType(event.target.value)}
+            className="mt-2 w-full rounded-[3px] border border-line bg-ink-100 px-3.5 py-2.5
+                       text-[15px] text-paper-000 outline-none focus:border-line-strong"
           >
-            {TYPES.map(([value, label]) => (
-              <option key={value} value={value}>
-                {label}
+            {TYPES.map((option) => (
+              <option key={option} value={option}>
+                {option}
               </option>
             ))}
           </select>
-        </label>
+        </div>
 
-        <div className="grid gap-4 sm:grid-cols-3">
-          <label className="block">
-            <span className="text-sm text-neutral-400">Language</span>
-            <input
-              value={language}
-              onChange={(e) => setLanguage(e.target.value)}
-              className={field}
-              placeholder="en"
-              maxLength={20}
-            />
-          </label>
+        <div className="grid gap-6 sm:grid-cols-3">
+          <Field
+            id="runtime"
+            label="Runtime"
+            value={runtime}
+            onChange={setRuntime}
+            hint="minutes"
+            inputMode="decimal"
+          />
+          <Field
+            id="language"
+            label="Language"
+            value={language}
+            onChange={setLanguage}
+            hint="en"
+          />
+          <Field
+            id="country"
+            label="Country"
+            value={country}
+            onChange={setCountry}
+            hint="GB"
+            maxLength={2}
+          />
+        </div>
 
-          <label className="block">
-            <span className="text-sm text-neutral-400">Runtime (min)</span>
-            <input
-              type="number"
-              min={0}
-              value={runtime}
-              onChange={(e) => setRuntime(e.target.value)}
-              className={field}
-              placeholder="82"
-            />
+        <div>
+          <label htmlFor="synopsis" className="slate block text-paper-300">
+            Synopsis
           </label>
-
-          <label className="block">
-            <span className="text-sm text-neutral-400">Country</span>
-            <input
-              value={country}
-              onChange={(e) => setCountry(e.target.value)}
-              className={field}
-              placeholder="GB"
-              maxLength={2}
-            />
-          </label>
+          <textarea
+            id="synopsis"
+            rows={4}
+            value={synopsis}
+            onChange={(event) => setSynopsis(event.target.value)}
+            aria-describedby="synopsis-hint"
+            className="mt-2 w-full rounded-[3px] border border-line bg-ink-100 px-3.5 py-2.5
+                       text-[15px] leading-relaxed text-paper-000 outline-none
+                       focus:border-line-strong"
+          />
+          <p id="synopsis-hint" className="mt-1.5 text-xs text-paper-400">
+            Some destinations publish a required length for this.
+          </p>
         </div>
 
         {error && (
-          <p role="alert" className="text-sm text-rose-400">
+          <p
+            role="alert"
+            className="border-l-2 border-stop bg-stop-bg/40 py-2.5 pl-3 text-sm text-paper-100"
+          >
             {error}
           </p>
         )}
 
         <button
           type="submit"
-          disabled={busy}
-          className="rounded bg-neutral-100 px-5 py-2 font-medium text-neutral-950
-                     transition hover:bg-white disabled:opacity-50"
+          disabled={busy || title.trim().length === 0}
+          className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium
+                     text-ink-000 transition hover:bg-white disabled:opacity-50"
         >
-          {busy ? "Creating…" : "Create project"}
+          {busy ? "Creating…" : "Continue to the master"}
         </button>
       </form>
-    </main>
+    </>
+  );
+}
+
+function Field({
+  id,
+  label,
+  value,
+  onChange,
+  hint,
+  required,
+  autoFocus,
+  maxLength,
+  inputMode,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  hint?: string;
+  required?: boolean;
+  autoFocus?: boolean;
+  maxLength?: number;
+  inputMode?: "text" | "decimal";
+}) {
+  return (
+    <div>
+      <label htmlFor={id} className="slate block text-paper-300">
+        {label}
+      </label>
+      <input
+        id={id}
+        value={value}
+        required={required}
+        // eslint-disable-next-line jsx-a11y/no-autofocus
+        autoFocus={autoFocus}
+        maxLength={maxLength}
+        inputMode={inputMode}
+        placeholder={hint}
+        onChange={(event) => onChange(event.target.value)}
+        className="mt-2 w-full rounded-[3px] border border-line bg-ink-100 px-3.5 py-2.5
+                   text-[15px] text-paper-000 outline-none placeholder:text-paper-500
+                   focus:border-line-strong"
+      />
+    </div>
   );
 }

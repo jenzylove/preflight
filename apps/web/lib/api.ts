@@ -99,6 +99,7 @@ export const api = {
     primary_language?: string;
     runtime_seconds?: number;
     country_of_origin?: string;
+    synopsis?: string;
   }) =>
     call<Project>("/v1/projects", {
       method: "POST",
