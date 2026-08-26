@@ -226,8 +226,21 @@ def deduplicate_conflicts(conflicts: list[dict]) -> list[dict]:
                 if statement != existing["requirements"][i]:
                     phrasings[i].append(statement)
 
-    ordered = sorted(
-        seen.values(),
+    # A field that already conflicts irreconcilably does not also need to be
+    # reported as a preference. Telling a user their subtitles cannot satisfy
+    # both destinations, and then that the two destinations disagree about
+    # subtitles, is the same sentence twice.
+    hard_fields = {
+        (c["assetType"], c["field"], tuple(sorted(c["destinations"])))
+        for c in seen.values() if c.get("strength") == "hard"
+    }
+    kept = [
+        c for c in seen.values()
+        if c.get("strength") == "hard"
+        or (c["assetType"], c["field"], tuple(sorted(c["destinations"]))) not in hard_fields
+    ]
+
+    return sorted(
+        kept,
         key=lambda c: (c.get("strength") != "hard", -c.get("occurrences", 1), c.get("field", "")),
     )
-    return ordered
