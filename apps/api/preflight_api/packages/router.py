@@ -38,6 +38,7 @@ from ..core.models import (
     Passport,
     Project,
     RepairPlan,
+    RuleDisposition,
     RulePackRow,
     RuleRow,
     SourceEvidenceRow,
@@ -279,6 +280,19 @@ def get_passport(
     )
     version = (existing.version + 1) if existing else 1
 
+    set_aside = session.scalars(
+        select(RuleDisposition).where(
+            RuleDisposition.project_id == project.id,
+            RuleDisposition.action == "set_aside",
+        )
+    ).all()
+    overrides = [
+        f"A published requirement was set aside by the project owner and not "
+        f"measured: {_describe_rule_row(session.get(RuleRow, d.rule_id))} "
+        f"- {d.reason}"
+        for d in set_aside
+    ]
+
     passport = build_passport(
         project_id=str(project.id),
         project_title=project.title,
@@ -291,6 +305,7 @@ def get_passport(
         if approval else [],
         validator_version=(packages[0].manifest_json or {}).get("validatorVersion", ""),
         tool_versions=_tool_versions(assets, session),
+        extra_limitations=overrides,
     )
 
     # Store the first issue; later reads reuse it rather than minting versions.
@@ -312,6 +327,12 @@ def get_passport(
         passport=passport.to_dict(),
         report=passport.to_report(),
     )
+
+
+def _describe_rule_row(row: RuleRow | None) -> str:
+    if row is None:
+        return "an unknown requirement"
+    return f"{row.asset_type}.{row.field} {row.operator} {row.expected_value_json}"
 
 
 def _role_for_operation(operation: str) -> str:

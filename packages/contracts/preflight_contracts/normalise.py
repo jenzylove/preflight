@@ -28,14 +28,29 @@ from collections import defaultdict
 from .compare import mutually_exclusive
 from .rules import AssetType, Operator, Rule, RulePack, Severity
 
+_INF = float("inf")
+
 
 def _is_numeric_window(rule: Rule) -> bool:
-    return rule.operator in (Operator.BETWEEN, Operator.ANY_OF_RANGES)
+    """Anything that describes a span of acceptable numbers.
+
+    Open-ended bounds count: "at most 20 Mbps" and "20 to 30 Mbps" are both
+    windows, and a destination listing both alongside "90 to 120 Mbps" is
+    listing tiers. Excluding gte and lte here left those groups uncollapsed and
+    unsatisfiable.
+    """
+    return rule.operator in (
+        Operator.BETWEEN, Operator.ANY_OF_RANGES, Operator.GTE, Operator.LTE,
+    )
 
 
 def _windows(rule: Rule) -> list[list[float]]:
     if rule.operator is Operator.BETWEEN:
         return [[float(rule.value[0]), float(rule.value[1])]]
+    if rule.operator is Operator.GTE:
+        return [[float(rule.value), _INF]]
+    if rule.operator is Operator.LTE:
+        return [[-_INF, float(rule.value)]]
     return [[float(lo), float(hi)] for lo, hi in rule.value]
 
 
@@ -120,12 +135,16 @@ def _combine(group: list[Rule]) -> Rule | None:
 
     if all(_is_numeric_window(r) for r in group):
         windows = _merge_windows([w for r in group for w in _windows(r)])
-        value = windows if len(windows) > 1 else None
-        if value is None:
-            # The union turned out contiguous, so a plain range says it better.
+        if len(windows) == 1:
             low, high = windows[0]
+            # The union turned out contiguous, so say it in the plainest form
+            # the bounds allow.
+            if low == -_INF:
+                return _rewrite(first, Operator.LTE, high, group)
+            if high == _INF:
+                return _rewrite(first, Operator.GTE, low, group)
             return _rewrite(first, Operator.BETWEEN, [low, high], group)
-        return _rewrite(first, Operator.ANY_OF_RANGES, value, group)
+        return _rewrite(first, Operator.ANY_OF_RANGES, windows, group)
 
     if all(_is_set(r) for r in group):
         seen: list = []

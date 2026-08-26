@@ -13,6 +13,7 @@ provenance chain, not a flag that erases where the rule came from.
 from __future__ import annotations
 
 import uuid
+from dataclasses import replace
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -28,7 +29,13 @@ from preflight_contracts.rules import (
     TrustTier,
 )
 
-from .models import Destination, RulePackRow, RuleRow, SourceEvidenceRow
+from .models import (
+    Destination,
+    RuleDisposition,
+    RulePackRow,
+    RuleRow,
+    SourceEvidenceRow,
+)
 from .normalise import normalise_pack
 
 #: Statuses a rule pack moves through. Only CONFIRMED packs are ever compared
@@ -93,6 +100,17 @@ def load_project_rule_packs(
     if not selections:
         return [], {}, set()
 
+    # Rules the owner judged misextracted stay in the pack as context: visible,
+    # attributed, and never asserted against a file.
+    set_aside = {
+        d.rule_id for d in session.scalars(
+            select(RuleDisposition).where(
+                RuleDisposition.project_id == project_id,
+                RuleDisposition.action == "set_aside",
+            )
+        ).all()
+    }
+
     selected_destination_ids = {s.destination_id for s in selections}
     pinned_pack_ids = {s.rule_pack_id for s in selections if s.rule_pack_id}
 
@@ -140,6 +158,8 @@ def load_project_rule_packs(
             evidence_lookup[contract_evidence.evidence_id] = contract_evidence
 
             rule = _to_contract_rule(rule_row)
+            if rule_row.id in set_aside:
+                rule = replace(rule, severity=Severity.CONTEXT)
             rules.append(rule)
 
             if _needs_confirmation(rule_row):

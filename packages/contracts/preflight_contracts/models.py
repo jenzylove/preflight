@@ -519,3 +519,42 @@ class ProjectDestination(Base):
     __table_args__ = (
         UniqueConstraint("project_id", "destination_id", name="uq_project_destination"),
     )
+
+
+class RuleDisposition(Base):
+    """A user's judgement about one extracted rule, for one project.
+
+    Extraction reads published specifications well but not perfectly. It reads
+    "Bitrate from 320 kbit/s" as an exact equality, and the name of a naming
+    convention as the pattern itself. A producer looking at their own delivery
+    knows which of those are real.
+
+    So the owner can set a rule aside, with a reason, and that decision is
+    recorded against them and carried into the passport. Preflight does not
+    delete the rule or pretend it was never extracted: the delivery was made in
+    the knowledge that a published requirement was judged misread, and whoever
+    receives the package can see that.
+    """
+
+    __tablename__ = "rule_dispositions"
+
+    id: Mapped[uuid.UUID] = _pk()
+    project_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("projects.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    rule_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("rules.id", ondelete="CASCADE"), nullable=False
+    )
+    decided_by: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    action: Mapped[str] = mapped_column(String(20), nullable=False)
+    reason: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = _created()
+
+    __table_args__ = (
+        CheckConstraint("action IN ('accept','set_aside')", name="ck_disposition_action"),
+        # A reason is not optional. Setting a published requirement aside
+        # without saying why is exactly the silent override this exists to
+        # prevent.
+        CheckConstraint("length(trim(reason)) > 0", name="ck_disposition_has_reason"),
+        UniqueConstraint("project_id", "rule_id", name="uq_disposition_per_rule"),
+    )
