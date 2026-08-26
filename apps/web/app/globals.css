@@ -1,3 +1,176 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Preflight's visual system.
+ *
+ * Two registers, deliberately different. The public landing is cinematic: deep
+ * black, large type, film imagery given room. The workspace is quiet and
+ * technical: near-black, tight rhythm, colour reserved for meaning.
+ *
+ * The workspace is where someone checks whether their film can be delivered.
+ * A surface that competes for attention there is a surface that makes a
+ * measured value harder to read, so almost everything in it is neutral.
+ */
+
+:root {
+  /* Ground. Not pure black — pure black flattens film stills and kills the
+     sense of depth the hero depends on. */
+  --ink-000: #08090b;
+  --ink-050: #0c0e11;
+  --ink-100: #111419;
+  --ink-150: #171b21;
+  --ink-200: #1e232a;
+  --ink-300: #2a3038;
+  --ink-400: #3a424c;
+
+  /* Text. Warm off-white rather than #fff: paper, not screen. */
+  --paper-000: #f4f2ee;
+  --paper-100: #ddd9d2;
+  --paper-200: #b4b0a9;
+  --paper-300: #857f78;
+  --paper-400: #5d5952;
+
+  /* One accent, used sparingly. Warm amber reads as projector light and does
+     not collide with any status colour. */
+  --accent: #d9a441;
+  --accent-dim: #8a6a2c;
+
+  /* Status. Each is paired with a glyph and a label everywhere it appears —
+     colour never carries meaning alone. */
+  --ok: #6faa7f;
+  --ok-bg: #10231a;
+  --review: #c9a227;
+  --review-bg: #241f0e;
+  --act: #c9793f;
+  --act-bg: #24160e;
+  --stop: #c15f5f;
+  --stop-bg: #251214;
+  --think: #6f8fae;
+  --think-bg: #101a24;
+  --idle: #6b7280;
+  --idle-bg: #16191e;
+
+  --line: rgba(244, 242, 238, 0.09);
+  --line-strong: rgba(244, 242, 238, 0.16);
+
+  --measure: 68ch;
+}
+
+* {
+  border-color: var(--line);
+}
+
+html {
+  background: var(--ink-000);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  background: var(--ink-000);
+  color: var(--paper-100);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+}
+
+/* Numbers in a technical table must line up. Tabular figures are the
+   difference between a column of measurements and a ransom note. */
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: rgba(217, 164, 65, 0.25);
+  color: var(--paper-000);
+}
+
+/* Focus is always visible. A keyboard user checking delivery requirements
+   needs to know where they are as much as a mouse user does. */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.hairline {
+  border-top: 1px solid var(--line);
+}
+
+/* Film stills sit behind content often enough to deserve a shared treatment:
+   dimmed, slightly desaturated, so text over them stays legible. */
+.still {
+  filter: saturate(0.85) contrast(1.05);
+}
+
+.still-scrim {
+  background: linear-gradient(
+    to top,
+    var(--ink-000) 0%,
+    rgba(8, 9, 11, 0.85) 35%,
+    rgba(8, 9, 11, 0.35) 70%,
+    rgba(8, 9, 11, 0.15) 100%
+  );
+}
+
+/* The hero's layer labels. Small, uppercase, technical — closer to a slate
+   than to a caption. */
+.slate {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  font-size: 0.6875rem;
+}
+
+@keyframes drift {
+  0%, 100% { transform: translate3d(0, 0, 0); }
+  50% { transform: translate3d(0, -6px, 0); }
+}
+
+@keyframes sweep {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+
+/* An indeterminate bar for work whose real duration nobody knows. It says
+   "running", not "63% done", because inventing a percentage for a media job
+   is a lie the user will catch. */
+.indeterminate::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 40%;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(217, 164, 65, 0.55),
+    transparent
+  );
+  animation: sweep 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  /* The hero is a scroll-driven sequence. With motion reduced it becomes a
+     static exploded diagram: every layer visible at once, nothing moving,
+     the same story told in one frame instead of five. */
+  .motion-only {
+    display: none !important;
+  }
+
+  .reduced-only {
+    display: block !important;
+  }
+}
+
+.reduced-only {
+  display: none;
+}
