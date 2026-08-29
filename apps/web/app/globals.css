@@ -103,6 +103,28 @@ body {
   filter: saturate(0.85) contrast(1.05);
 }
 
+.hero-projector {
+  background:
+    radial-gradient(ellipse 64% 48% at 50% 48%, rgba(217, 164, 65, 0.105), transparent 66%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.018), transparent 24%, transparent 76%, rgba(255, 255, 255, 0.012));
+}
+
+.hero-projector::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  opacity: 0.18;
+  background-image: linear-gradient(rgba(255,255,255,0.035) 1px, transparent 1px);
+  background-size: 100% 12.5vh;
+  mask-image: linear-gradient(to bottom, transparent, black 24%, black 76%, transparent);
+}
+
+.hero-scan {
+  border-right: 1px solid rgba(217, 164, 65, 0.78);
+  background: linear-gradient(90deg, transparent, rgba(217, 164, 65, 0.075));
+  filter: drop-shadow(10px 0 24px rgba(217, 164, 65, 0.16));
+  will-change: transform, opacity;
+}
 .still-scrim {
   background: linear-gradient(
     to top,

@@ -10,7 +10,7 @@ import {
   SpecLayer,
   SubtitleLayer,
 } from "./Layers";
-import { ease, range, useScrollProgress, usePrefersReducedMotion } from "./useScrollProgress";
+import { ease, range, useScrollProgress } from "./useScrollProgress";
 
 /**
  * The hero.
@@ -71,75 +71,105 @@ const LAYERS: LayerSpec[] = [
 
 export function Hero() {
   const { ref, progress } = useScrollProgress<HTMLDivElement>();
-  const reduced = usePrefersReducedMotion();
 
-  // Four movements. Slow, and overlapping, so nothing snaps.
-  const settle = ease(range(progress, 0.0, 0.12));      // the frame arrives
-  const spread = ease(range(progress, 0.12, 0.46));     // it comes apart
-  const inspect = ease(range(progress, 0.46, 0.70));    // requirements land on it
-  const resolve = ease(range(progress, 0.72, 0.94));    // it becomes a package
+  // Five movements overlap so the scene behaves like one slow camera move,
+  // not a row of triggered interface animations.
+  const arrive = ease(range(progress, 0.0, 0.11));
+  const open = ease(range(progress, 0.10, 0.43));
+  const inspect = ease(range(progress, 0.40, 0.67));
+  const resolve = ease(range(progress, 0.68, 0.89));
+  const closing = ease(range(progress, 0.86, 1.0));
+  const apart = open * (1 - resolve);
 
-  const closing = range(progress, 0.88, 1.0);
+  const stage =
+    progress < 0.1
+      ? "Finished"
+      : progress < 0.42
+        ? "Opened"
+        : progress < 0.69
+          ? "Inspected"
+          : "Prepared";
 
   return (
     <section
       ref={ref}
-      className="relative h-[420vh] motion-only"
+      className="relative h-[500vh] motion-only"
       aria-labelledby="hero-heading"
     >
-      <div className="sticky top-0 flex h-screen items-center justify-center overflow-hidden">
-        {/* A faint horizon behind everything, so the frame reads as floating in
-            a space rather than pasted onto a black rectangle. */}
+      <div className="sticky top-0 flex h-[100svh] items-center justify-center overflow-hidden">
+        <header className="absolute inset-x-0 top-0 z-50 flex items-center justify-between px-5 py-5 sm:px-8 sm:py-7">
+          <Link
+            href="/"
+            className="text-[11px] font-medium uppercase tracking-[0.28em] text-paper-100"
+          >
+            Pre<span className="text-accent">—</span>flight
+          </Link>
+          <div className="flex items-center gap-4">
+            <span className="hidden font-mono text-[9px] uppercase tracking-[0.16em] text-paper-400 sm:block">
+              Delivery readiness / 01
+            </span>
+            <Link
+              href="/signin"
+              className="text-xs text-paper-300 transition hover:text-paper-000"
+            >
+              Sign in
+            </Link>
+          </div>
+        </header>
+
         <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              "radial-gradient(120% 70% at 50% 62%, rgba(217,164,65,0.07), transparent 62%)",
-            opacity: 0.6 + settle * 0.4 - resolve * 0.2,
-          }}
+          className="hero-projector pointer-events-none absolute inset-0"
+          style={{ opacity: 0.38 + arrive * 0.62 - closing * 0.35 }}
           aria-hidden="true"
         />
 
         <div
-          className="relative w-[min(92vw,1120px)]"
-          style={{ perspective: "1800px" }}
+          className="pointer-events-none absolute inset-x-0 top-[15vh] overflow-hidden text-center"
+          aria-hidden="true"
+        >
+          <p
+            className="font-display text-[clamp(5rem,17vw,15rem)] leading-none tracking-[-0.055em] text-white/[0.09]"
+            style={{
+              opacity: 0.62 + arrive * 0.38 - closing,
+              transform: `translateY(${(1 - arrive) * 28}px) scale(${0.96 + arrive * 0.04})`,
+            }}
+          >
+            {stage}
+          </p>
+        </div>
+
+        <div
+          className="relative mt-[-2vh] w-[min(92vw,1180px)] sm:mt-0"
+          style={{ perspective: "2100px", perspectiveOrigin: "50% 38%" }}
         >
           <div
             className="relative aspect-[2.39/1] w-full"
             style={{
               transformStyle: "preserve-3d",
-              transform: `translateY(${(1 - settle) * 26}px) scale(${
-                0.94 + settle * 0.06 - resolve * 0.02
-              })`,
-              opacity: 0.25 + settle * 0.75,
+              transform: `translate3d(0, ${(1 - arrive) * 36 - closing * 110}px, 0) scale(${0.9 + arrive * 0.1 - apart * 0.08 - closing * 0.16}) rotateX(${apart * 2.5}deg)`,
+              opacity: 0.68 + arrive * 0.32 - closing * 0.58,
             }}
           >
             {LAYERS.map((layer) => {
-              // Each plane pulls away from the picture, then returns. The
-              // picture itself barely moves: everything else separates from it.
               const rank = layer.depth;
-              const apart = spread * (1 - resolve);
-
-              const z = -rank * 128 * apart;
-              const y = rank * 34 * apart;
-              const x = layer.x * 620 * apart;
-              const rotate = apart * (rank === 0 ? -3 : -9 - rank * 1.4);
-
-              // The spec sheet is the last to arrive and the first to leave: it
-              // is not part of the film, it is what the film is measured against.
+              const z = -rank * 150 * apart;
+              const y = rank * 43 * apart;
+              const x = layer.x * 760 * apart;
+              const rotateX = apart * (-5 - rank * 3.1);
+              const rotateZ = apart * (rank % 2 === 0 ? -0.45 : 0.45);
               const isSpec = layer.key === "spec";
               const opacity = isSpec
-                ? Math.min(1, apart * 1.4) * (1 - resolve)
+                ? Math.min(1, apart * 1.7) * (1 - resolve)
                 : rank === 0
                   ? 1
-                  : (0.15 + apart * 0.85) * (1 - resolve * 0.9);
+                  : (0.08 + apart * 0.92) * (1 - resolve * 0.92);
 
               return (
                 <div
                   key={layer.key}
                   className="absolute inset-0"
                   style={{
-                    transform: `translate3d(${x}px, ${y}px, ${z}px) rotateX(${rotate}deg)`,
+                    transform: `translate3d(${x}px, ${y}px, ${z}px) rotateX(${rotateX}deg) rotateZ(${rotateZ}deg)`,
                     opacity,
                     zIndex: 10 - rank,
                     willChange: "transform, opacity",
@@ -157,15 +187,25 @@ export function Hero() {
               );
             })}
 
-            {/* The findings. They appear only once the layers are apart and the
-                spec has arrived, because that is the only moment they mean
-                anything. */}
+            <div
+              className="hero-scan pointer-events-none absolute -inset-y-8 left-[-12%] z-40 w-[18%]"
+              style={{
+                opacity: inspect * (1 - resolve),
+                transform: `translateX(${inspect * 690}%)`,
+              }}
+              aria-hidden="true"
+            />
+
             <Findings amount={inspect * (1 - resolve)} />
 
-            {/* The resolved package fades in over the stack as it closes. */}
             <div
               className="absolute inset-0"
-              style={{ opacity: resolve, zIndex: 20, pointerEvents: "none" }}
+              style={{
+                opacity: resolve * (1 - closing * 0.72),
+                transform: `scale(${0.94 + resolve * 0.06})`,
+                zIndex: 20,
+                pointerEvents: "none",
+              }}
               aria-hidden="true"
             >
               <PackageLayer />
@@ -173,48 +213,48 @@ export function Hero() {
           </div>
         </div>
 
-        {/* Opening statement, out before the layers separate. */}
         <div
-          className="pointer-events-none absolute inset-x-0 bottom-[8vh] px-6 text-center"
-          style={{ opacity: (1 - range(progress, 0.02, 0.14)) * settle }}
+          className="pointer-events-none absolute bottom-[9vh] left-6 sm:bottom-10 sm:left-8"
+          style={{ opacity: (1 - range(progress, 0.02, 0.16)) * (0.72 + arrive * 0.28) }}
         >
-          <p className="slate text-paper-400">A finished film is not a file</p>
+          <p className="slate text-paper-300">One finished master</p>
+          <p className="mt-1 max-w-[18rem] text-sm leading-relaxed text-paper-400">
+            Opened, measured and prepared for every place it has to go.
+          </p>
         </div>
 
-        {/* Closing statement and the way in. */}
+        <StageRail progress={progress} stage={stage} />
+
         <div
-          className="absolute inset-x-0 bottom-0 top-0 flex flex-col items-center justify-center px-6 text-center"
+          className="absolute inset-0 z-40 flex flex-col items-center justify-center px-6 text-center"
           style={{
             opacity: closing,
             pointerEvents: closing > 0.6 ? "auto" : "none",
-            transform: `translateY(${(1 - closing) * 14}px)`,
+            transform: `translateY(${(1 - closing) * 34}px)`,
           }}
         >
-          <div className="rounded-sm bg-ink-000/70 px-6 py-8 backdrop-blur-[2px] sm:px-10">
-            <h1
-              id="hero-heading"
-              className="font-display text-display-sm text-paper-000 sm:text-display-md"
+          <p className="slate mb-6 text-accent">Verified package / ready</p>
+          <h1
+            id="hero-heading"
+            className="max-w-5xl font-display text-[clamp(3.1rem,7.5vw,7rem)] leading-[0.92] tracking-[-0.04em] text-paper-000"
+          >
+            Your film is finished.
+            <br />
+            <span className="text-paper-200">Make sure it’s ready to leave.</span>
+          </h1>
+          <div className="mt-9 flex flex-wrap items-center justify-center gap-3">
+            <Link
+              href="/projects"
+              className="rounded-[3px] bg-paper-000 px-6 py-3 text-sm font-medium text-ink-000 transition hover:bg-white"
             >
-              Your film is finished.
-              <br />
-              <span className="text-paper-200">Make sure it’s ready to leave.</span>
-            </h1>
-            <div className="mt-8 flex flex-wrap items-center justify-center gap-3">
-              <Link
-                href="/projects"
-                className="rounded-[3px] bg-paper-000 px-6 py-3 text-sm font-medium text-ink-000
-                           transition hover:bg-white"
-              >
-                Prepare your film
-              </Link>
-              <Link
-                href="/signin"
-                className="rounded-[3px] px-5 py-3 text-sm text-paper-200 ring-1 ring-inset
-                           ring-line-strong transition hover:text-paper-000"
-              >
-                Sign in
-              </Link>
-            </div>
+              Prepare your film
+            </Link>
+            <Link
+              href="/signin"
+              className="rounded-[3px] px-5 py-3 text-sm text-paper-200 ring-1 ring-inset ring-line-strong transition hover:text-paper-000"
+            >
+              Sign in
+            </Link>
           </div>
         </div>
 
@@ -224,12 +264,28 @@ export function Hero() {
   );
 }
 
-/**
- * What inspection actually produces: a small number of specific findings.
- *
- * Three, not thirty. The point being made is that Preflight tells you the
- * thing that will stop your delivery, not that it can generate a long report.
- */
+function StageRail({ progress, stage }: { progress: number; stage: string }) {
+  return (
+    <div
+      className="pointer-events-none absolute bottom-8 right-6 top-24 hidden w-20 flex-col items-end justify-between sm:flex sm:right-8"
+      aria-hidden="true"
+    >
+      <p className="font-mono text-[9px] uppercase tracking-[0.16em] text-paper-400">
+        {stage}
+      </p>
+      <div className="relative h-36 w-px overflow-hidden bg-white/10">
+        <div
+          className="absolute inset-x-0 top-0 bg-accent"
+          style={{ height: `${Math.max(2, progress * 100)}%` }}
+        />
+      </div>
+      <p className="font-mono text-[9px] text-paper-400 tnum">
+        {String(Math.round(progress * 100)).padStart(2, "0")} / 100
+      </p>
+    </div>
+  );
+}
+
 function Findings({ amount }: { amount: number }) {
   const findings = [
     {
@@ -306,55 +362,59 @@ function ScrollHint({ visible }: { visible: boolean }) {
  */
 export function HeroStatic() {
   return (
-    <section className="reduced-only px-6 py-24" aria-labelledby="hero-heading-static">
-      <div className="mx-auto max-w-5xl">
-        <h1
-          id="hero-heading-static"
-          className="font-display text-display-sm text-paper-000 sm:text-display-md"
-        >
-          Your film is finished.
-          <br />
-          <span className="text-paper-200">Make sure it’s ready to leave.</span>
-        </h1>
-        <p className="mt-6 max-w-measure text-lg leading-relaxed text-paper-200">
-          A finished film is picture, sound, subtitles and metadata that have to
-          satisfy someone else’s published requirements. Preflight takes it
-          apart, measures every piece, and checks each one against what the
-          destination asks for today.
-        </p>
+    <section
+      className="reduced-only relative min-h-[100svh] overflow-hidden px-6 py-24"
+      aria-labelledby="hero-heading-static"
+    >
+      <div className="hero-projector pointer-events-none absolute inset-0 opacity-70" />
+      <div className="relative mx-auto grid min-h-[calc(100svh-12rem)] max-w-6xl items-center gap-16 lg:grid-cols-[0.8fr_1.2fr]">
+        <div>
+          <p className="slate mb-5 text-accent">Finished / inspected / prepared</p>
+          <h1
+            id="hero-heading-static"
+            className="font-display text-display-sm text-paper-000 sm:text-display-md lg:text-display-lg"
+          >
+            Your film is finished.
+            <br />
+            <span className="text-paper-200">Make sure it’s ready to leave.</span>
+          </h1>
+          <p className="mt-6 max-w-measure text-base leading-relaxed text-paper-200">
+            Picture, sound, subtitles, metadata and the destination specification —
+            opened as one composition, measured, then resolved into a verified package.
+          </p>
+          <div className="mt-9 flex flex-wrap gap-3">
+            <Link
+              href="/projects"
+              className="rounded-[3px] bg-paper-000 px-6 py-3 text-sm font-medium text-ink-000"
+            >
+              Prepare your film
+            </Link>
+            <Link
+              href="/signin"
+              className="rounded-[3px] px-5 py-3 text-sm text-paper-200 ring-1 ring-inset ring-line-strong"
+            >
+              Sign in
+            </Link>
+          </div>
+        </div>
 
-        <div className="mt-12 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {LAYERS.map((layer) => (
-            <figure key={layer.key} className="space-y-2">
-              <div className="aspect-[2.39/1] w-full">
-                <LayerFrame label={layer.label} value={layer.value}>
+        <div className="relative h-[min(68vw,500px)]" aria-label="Exploded technical view of a finished film">
+          <div className="absolute inset-x-0 top-[12%] aspect-[2.39/1] [perspective:1600px]">
+            {LAYERS.map((layer, index) => (
+              <div
+                key={layer.key}
+                className="absolute inset-0"
+                style={{
+                  transform: `translate3d(${layer.x * 180}px, ${index * 34}px, ${-index * 70}px) rotateX(${-index * 2.4}deg)`,
+                  zIndex: 10 - index,
+                }}
+              >
+                <LayerFrame label={layer.label} value={layer.value} tone={layer.tone}>
                   {layer.render()}
                 </LayerFrame>
               </div>
-            </figure>
-          ))}
-          <figure className="space-y-2">
-            <div className="aspect-[2.39/1] w-full">
-              <LayerFrame label="Verified package">
-                <PackageLayer />
-              </LayerFrame>
-            </div>
-          </figure>
-        </div>
-
-        <div className="mt-12 flex flex-wrap gap-3">
-          <Link
-            href="/projects"
-            className="rounded-[3px] bg-paper-000 px-6 py-3 text-sm font-medium text-ink-000"
-          >
-            Prepare your film
-          </Link>
-          <Link
-            href="/signin"
-            className="rounded-[3px] px-5 py-3 text-sm text-paper-200 ring-1 ring-inset ring-line-strong"
-          >
-            Sign in
-          </Link>
+            ))}
+          </div>
         </div>
       </div>
     </section>

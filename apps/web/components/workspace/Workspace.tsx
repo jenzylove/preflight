@@ -158,15 +158,6 @@ function TopBar({ user }: { user: User }) {
                     <p className="truncate text-sm text-paper-100">{user.email}</p>
                     <p className="mt-0.5 text-xs text-paper-400">Signed in</p>
                   </div>
-                  <Link
-                    href="/settings"
-                    role="menuitem"
-                    onClick={() => setMenuOpen(false)}
-                    className="block px-4 py-2.5 text-sm text-paper-200 hover:bg-ink-150
-                               hover:text-paper-000"
-                  >
-                    Settings
-                  </Link>
                   <button
                     type="button"
                     role="menuitem"
