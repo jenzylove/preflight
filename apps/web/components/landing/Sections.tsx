@@ -1,419 +1,96 @@
 import Link from "next/link";
 
-/**
- * After the hero, the page calms down.
- *
- * The hero makes the argument emotionally; these sections make it concretely,
- * in the order the product actually works. Nothing here animates on scroll —
- * spectacle all the way down is exhausting, and the reader is now here to
- * find out whether this is real.
- *
- * Everything shown is illustrative and says so where it could be mistaken for
- * a measurement. The authenticated product never shows invented values.
- */
+const eyebrow = "text-[10px] font-semibold uppercase tracking-[0.24em] text-[#786574]";
+const heading = "font-display text-[clamp(3.2rem,5.7vw,6.2rem)] leading-[0.9] tracking-[-0.045em] text-[#3b303a]";
 
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return <p className="slate text-paper-400">{children}</p>;
-}
-
-function SectionHeading({ children }: { children: React.ReactNode }) {
+export function Workflow() {
+  const steps = [
+    ["01", "Bring the master", "Upload the finished film and choose every destination it needs to reach."],
+    ["02", "Measure against reality", "Preflight reads current, cited requirements and measures the file with media tools."],
+    ["03", "Leave with proof", "Approve safe repairs, revalidate the result, and receive a destination-ready package."],
+  ];
   return (
-    <h2 className="mt-4 max-w-[22ch] font-display text-display-sm leading-[1.05] text-paper-000">
-      {children}
-    </h2>
-  );
-}
-
-function Lede({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="mt-5 max-w-measure text-[17px] leading-relaxed text-paper-200">
-      {children}
-    </p>
-  );
-}
-
-function Section({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
-  return (
-    <section className={`border-t border-line px-6 py-24 sm:py-32 ${className}`}>
-      <div className="mx-auto max-w-5xl">{children}</div>
+    <section id="how-it-works" className="bg-[#c9bec4] px-6 py-28 text-[#40343e] sm:px-10 sm:py-36 lg:px-14">
+      <div className="mx-auto max-w-[1160px]">
+        <p className={eyebrow}>How it works</p>
+        <div className="mt-7 grid gap-12 lg:grid-cols-[0.82fr_1.18fr]">
+          <h2 className={heading}>From finished master to confident delivery.</h2>
+          <p className="max-w-[38rem] self-end text-lg leading-relaxed text-[#574753]">The film stays yours. Preflight handles the measurable work between final export and the moment a destination receives it.</p>
+        </div>
+        <ol className="mt-20 grid border-y border-[#665361]/20 md:grid-cols-3">
+          {steps.map(([number, title, body], index) => (
+            <li key={number} className={`py-9 md:px-8 ${index ? "border-t border-[#665361]/20 md:border-l md:border-t-0" : ""}`}>
+              <span className="font-mono text-[10px] text-[#806d7b]">{number}</span>
+              <h3 className="mt-8 font-display text-3xl text-[#3b303a]">{title}</h3>
+              <p className="mt-4 max-w-[20rem] text-sm leading-relaxed text-[#5c4c58]">{body}</p>
+            </li>
+          ))}
+        </ol>
+      </div>
     </section>
   );
 }
 
-/** One master, several destinations, each wanting something different. */
-export function OneMasterManyDestinations() {
-  const destinations = [
-    { name: "Berlinale", asks: ["ProRes or DCP", "Burned-in subtitles", "1920 × 1080"] },
-    { name: "Artdocfest", asks: ["MP4 or MOV", "SubRip sidecar", "−18…−21 LUFS"] },
-  ];
-
+export function Checks() {
+  const checks = ["Picture & container", "Sound & loudness", "Subtitles & captions", "Metadata & artwork"];
   return (
-    <Section>
-      <Eyebrow>01 — The problem</Eyebrow>
-      <SectionHeading>
-        One finished master. Every destination has different rules.
-      </SectionHeading>
-      <Lede>
-        Two real festivals, two published specifications. One mandates subtitles
-        burned into the picture. The other forbids exactly that and asks for a
-        SubRip file alongside. No single deliverable satisfies both, and nothing
-        about your master tells you so.
-      </Lede>
-
-      <div className="mt-14 grid gap-px overflow-hidden rounded-[2px] bg-line sm:grid-cols-2">
-        {destinations.map((destination) => (
-          <div key={destination.name} className="bg-ink-050 p-6 sm:p-8">
-            <p className="font-display text-2xl text-paper-000">{destination.name}</p>
-            <ul className="mt-5 space-y-2.5">
-              {destination.asks.map((ask) => (
-                <li
-                  key={ask}
-                  className="flex items-baseline gap-3 border-t border-line pt-2.5 text-sm text-paper-200"
-                >
-                  <span aria-hidden="true" className="text-paper-400">
-                    ·
-                  </span>
-                  {ask}
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-6 flex items-start gap-3 rounded-[2px] border-l-2 border-stop bg-stop-bg/40 py-3 pl-4 pr-5">
-        <span aria-hidden="true" className="mt-px text-stop">
-          ✕
-        </span>
-        <p className="text-sm text-paper-100">
-          These destinations require different subtitle deliveries.
-          <span className="text-paper-300">
-            {" "}
-            Preflight builds a separate package for each, and quotes the sentence
-            from each specification that says why.
-          </span>
-        </p>
-      </div>
-    </Section>
-  );
-}
-
-/** Requirements change; Preflight reads the current ones and cites them. */
-export function CurrentRequirements() {
-  return (
-    <Section>
-      <Eyebrow>02 — Retrieval</Eyebrow>
-      <SectionHeading>
-        Requirements change. Preflight checks the current ones.
-      </SectionHeading>
-      <Lede>
-        Specifications are retrieved from the destination’s own documentation
-        each time, hashed, and dated. A rule that cannot be traced to an
-        official page does not become a requirement your film is measured
-        against — it stays visible as context, and nothing else.
-      </Lede>
-
-      <div className="mt-14 space-y-px overflow-hidden rounded-[2px] bg-line">
-        {[
-          {
-            host: "artdocfest.com",
-            tier: "Official",
-            tone: "ok" as const,
-            note: "Technical requirements · retrieved today",
-          },
-          {
-            host: "berlinale.de",
-            tier: "Official",
-            tone: "ok" as const,
-            note: "Technical specifications · retrieved today",
-          },
-          {
-            host: "a film blog",
-            tier: "Unverified",
-            tone: "idle" as const,
-            note: "Kept as context. Cannot create a requirement.",
-          },
-        ].map((source) => (
-          <div
-            key={source.host}
-            className="flex flex-wrap items-center justify-between gap-3 bg-ink-050 px-5 py-4"
-          >
-            <div className="min-w-0">
-              <p
-                className={`font-mono text-sm ${
-                  source.tone === "ok" ? "text-paper-100" : "text-paper-400 line-through"
-                }`}
-              >
-                {source.host}
-              </p>
-              <p className="mt-0.5 text-xs text-paper-300">{source.note}</p>
-            </div>
-            <span
-              className={`slate rounded-[3px] px-2 py-1 ring-1 ring-inset ${
-                source.tone === "ok"
-                  ? "bg-ok-bg text-ok ring-ok/25"
-                  : "bg-idle-bg text-paper-300 ring-white/10"
-              }`}
-            >
-              {source.tier}
-            </span>
-          </div>
-        ))}
-      </div>
-
-      <p className="mt-6 text-sm text-paper-300">
-        Illustrative. In the product, every requirement links to the page it came
-        from and the date it was read.
-      </p>
-    </Section>
-  );
-}
-
-/** Measurement, not inference. */
-export function MeasureNeverGuess() {
-  const groups = [
-    {
-      title: "Picture",
-      rows: [
-        ["container", "mov"],
-        ["codec", "h264"],
-        ["resolution", "1920 × 1080"],
-        ["frame rate", "25"],
-      ],
-    },
-    {
-      title: "Sound",
-      rows: [
-        ["codec", "ac3"],
-        ["sample rate", "48 000 Hz"],
-        ["loudness", "−26.61 LUFS"],
-        ["true peak", "−21.94 dBTP"],
-      ],
-    },
-    {
-      title: "Subtitles",
-      rows: [
-        ["format", "vtt"],
-        ["cues", "3"],
-        ["burned in", "no"],
-        ["language", "en"],
-      ],
-    },
-  ];
-
-  return (
-    <Section>
-      <Eyebrow>03 — Measurement</Eyebrow>
-      <SectionHeading>Measure. Never guess.</SectionHeading>
-      <Lede>
-        A language model may read a requirement. Only a tool may state a fact
-        about your file. Every number Preflight reports comes from ffprobe,
-        ffmpeg’s EBU R128 implementation or Pillow, with the version of the tool
-        that produced it recorded alongside.
-      </Lede>
-
-      <div className="mt-14 grid gap-px overflow-hidden rounded-[2px] bg-line md:grid-cols-3">
-        {groups.map((group) => (
-          <div key={group.title} className="bg-ink-050 p-6">
-            <p className="slate text-paper-400">{group.title}</p>
-            <dl className="mt-4 space-y-2">
-              {group.rows.map(([key, value]) => (
-                <div
-                  key={key}
-                  className="flex items-baseline justify-between gap-4 border-t border-line pt-2"
-                >
-                  <dt className="text-xs text-paper-300">{key}</dt>
-                  <dd className="font-mono text-xs text-paper-100 tnum">{value}</dd>
-                </div>
-              ))}
-            </dl>
-          </div>
-        ))}
-      </div>
-
-      <p className="mt-6 text-sm text-paper-300">
-        Measured from the demonstration master on this page. Your own figures
-        come from your own file, and from nothing else.
-      </p>
-    </Section>
-  );
-}
-
-/** The safety model. */
-export function SafeRepairsStaySafe() {
-  const levels = [
-    {
-      name: "Safe to run",
-      tone: "ok" as const,
-      glyph: "✓",
-      body:
-        "Deterministic and non-creative. Loudness moved by a single gain offset; "
-        + "subtitles converted without retiming; the container rewritten without "
-        + "touching the picture. Runs only after you approve the exact plan.",
-    },
-    {
-      name: "Your decision",
-      tone: "review" as const,
-      glyph: "?",
-      body:
-        "Re-encoding the picture, cropping key art, translating subtitles. These "
-        + "change the work. Preflight shows what would be required and why, and "
-        + "will not do it on your behalf.",
-    },
-    {
-      name: "Preflight will not do this",
-      tone: "stop" as const,
-      glyph: "✕",
-      body:
-        "Producing a mix that does not exist, resolving contradictory instructions, "
-        + "or deciding something that needs authority Preflight does not have.",
-    },
-  ];
-
-  return (
-    <Section>
-      <Eyebrow>04 — Repair</Eyebrow>
-      <SectionHeading>Safe repairs stay safe.</SectionHeading>
-      <Lede>
-        The most valuable thing an automated tool can do with a finished film is
-        refuse. Preflight repairs only what it can do deterministically, proves
-        the picture came through untouched, and leaves everything else to you.
-      </Lede>
-
-      <div className="mt-14 space-y-px overflow-hidden rounded-[2px] bg-line">
-        {levels.map((level) => (
-          <div key={level.name} className="bg-ink-050 p-6 sm:flex sm:gap-8 sm:p-8">
-            <div className="flex items-baseline gap-3 sm:w-64 sm:shrink-0">
-              <span
-                aria-hidden="true"
-                className={
-                  level.tone === "ok"
-                    ? "text-ok"
-                    : level.tone === "review"
-                      ? "text-review"
-                      : "text-stop"
-                }
-              >
-                {level.glyph}
-              </span>
-              <p className="text-[15px] font-medium text-paper-000">{level.name}</p>
-            </div>
-            <p className="mt-3 max-w-measure text-sm leading-relaxed text-paper-200 sm:mt-0">
-              {level.body}
-            </p>
-          </div>
-        ))}
-      </div>
-    </Section>
-  );
-}
-
-/** Evidence. */
-export function EveryDeliveryKeepsItsEvidence() {
-  return (
-    <Section>
-      <Eyebrow>05 — Evidence</Eyebrow>
-      <SectionHeading>Every delivery keeps its evidence.</SectionHeading>
-      <Lede>
-        When the repairs finish, Preflight does not take the worker’s word for
-        it. The package is re-measured from disk, against the same published
-        requirements, and only then can it be called ready. What comes out is a
-        passport: the original hashes, every transformation, the rules and the
-        pages they came from, and whatever remains unresolved.
-      </Lede>
-
-      <div className="mt-14 overflow-hidden rounded-[2px] bg-ink-050 ring-1 ring-inset ring-line">
-        <div className="border-b border-line px-6 py-4">
-          <p className="slate text-paper-400">Release passport · extract</p>
+    <section className="bg-[#b7a9b5] px-6 py-28 text-[#3b303a] sm:px-10 sm:py-40 lg:px-14">
+      <div className="mx-auto grid max-w-[1160px] items-center gap-16 lg:grid-cols-[1.18fr_0.82fr]">
+        <div className="relative overflow-hidden rounded-[4px_120px_4px_4px] shadow-[0_30px_70px_rgba(57,42,54,0.24)]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/film/finishing-suite-v3.png" alt="A documentary master being reviewed in a professional finishing suite." className="aspect-[1.25/1] w-full object-cover" />
         </div>
-        <div className="space-y-3 px-6 py-6 font-mono text-xs leading-relaxed text-paper-200">
-          <p>
-            <span className="text-paper-400">original master </span>
-            <span className="tnum">sha256 4b1e…c7a9 · unchanged</span>
-          </p>
-          <p>
-            <span className="text-paper-400">transformation </span>
-            normalise_loudness · −26.61 → −19.42 LUFS
-          </p>
-          <p>
-            <span className="text-paper-400">transformation </span>
-            convert_subtitles · vtt → srt
-          </p>
-          <p>
-            <span className="text-paper-400">rule pack </span>
-            artdocfest v1 · retrieved 2026-08-26
-          </p>
-          <p className="text-review">
-            <span className="text-paper-400">limitation </span>
-            One published requirement was set aside by the owner and not measured.
-          </p>
-          <p className="text-paper-300">
-            Preflight verifies against the requirements published at the dates
-            recorded above. It is not a guarantee that the destination will
-            accept this delivery.
-          </p>
+        <div>
+          <p className={eyebrow}>What Preflight checks</p>
+          <h2 className={`${heading} mt-7`}>Every part of the film that has to arrive intact.</h2>
+          <p className="mt-7 max-w-[32rem] text-[16px] leading-[1.7] text-[#554551]">A requirement is cited. A file property is measured. Preflight keeps those two facts beside each other, so readiness never collapses into a vague score.</p>
+          <ul className="mt-10 border-t border-[#665361]/25">
+            {checks.map((item) => <li key={item} className="flex items-center justify-between border-b border-[#665361]/25 py-4 text-sm font-medium"><span>{item}</span><span className="text-[#7b6877]">Measured</span></li>)}
+          </ul>
         </div>
       </div>
-    </Section>
+    </section>
   );
 }
 
-/** Close. */
+export function DestinationReadiness() {
+  return (
+    <section className="bg-[#c9bec4] px-6 py-28 text-[#3b303a] sm:px-10 sm:py-40 lg:px-14">
+      <div className="mx-auto max-w-[1160px]">
+        <div className="grid gap-14 lg:grid-cols-[0.9fr_1.1fr]">
+          <div>
+            <p className={eyebrow}>Destination readiness</p>
+            <h2 className={`${heading} mt-7`}>One master. Different ways out.</h2>
+          </div>
+          <div className="self-end">
+            <p className="max-w-[39rem] text-lg leading-relaxed text-[#554551]">Festivals and platforms do not ask for the same thing. Preflight reads the current specification, prepares the right version, and records why each decision was made.</p>
+          </div>
+        </div>
+        <div className="mt-20 grid gap-px overflow-hidden rounded-[4px] bg-[#695666]/20 md:grid-cols-2">
+          <article className="bg-[#b7a9b5] p-8 sm:p-11"><p className={eyebrow}>Berlinale</p><h3 className="mt-12 font-display text-4xl">Burned-in subtitles.</h3><p className="mt-4 text-sm leading-relaxed text-[#554551]">A package built to the festival’s published picture and subtitle specification.</p></article>
+          <article className="bg-[#b7a9b5] p-8 sm:p-11"><p className={eyebrow}>Artdocfest</p><h3 className="mt-12 font-display text-4xl">SubRip beside the film.</h3><p className="mt-4 text-sm leading-relaxed text-[#554551]">The same master leaves differently because the destination requires it.</p></article>
+        </div>
+        <div className="mt-16 grid gap-8 border-t border-[#665361]/20 pt-10 sm:grid-cols-3">
+          {[['Current', 'Requirements are retrieved, dated and hashed.'], ['Safe', 'Only deterministic repairs run after approval.'], ['Traceable', 'The package carries its sources and transformations.']].map(([title, body]) => <div key={title}><p className="font-display text-3xl">{title}</p><p className="mt-3 max-w-[18rem] text-sm leading-relaxed text-[#5b4a57]">{body}</p></div>)}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export function FinalCall() {
   return (
-    <section className="relative border-t border-line px-6 py-32 sm:py-44">
-      <div
-        className="pointer-events-none absolute inset-0"
-        style={{
-          background:
-            "radial-gradient(90% 60% at 50% 100%, rgba(217,164,65,0.08), transparent 65%)",
-        }}
-        aria-hidden="true"
-      />
-      <div className="relative mx-auto max-w-3xl text-center">
-        <h2 className="font-display text-display-sm text-paper-000 sm:text-display-md">
-          Your film is finished.
-          <br />
-          <span className="text-paper-200">Make sure it’s ready to leave.</span>
-        </h2>
-        <div className="mt-10 flex flex-wrap items-center justify-center gap-3">
-          <Link
-            href="/projects"
-            className="rounded-[3px] bg-paper-000 px-7 py-3.5 text-sm font-medium text-ink-000
-                       transition hover:bg-white"
-          >
-            Prepare your film
-          </Link>
-          <Link
-            href="/signin"
-            className="rounded-[3px] px-6 py-3.5 text-sm text-paper-200 ring-1 ring-inset
-                       ring-line-strong transition hover:text-paper-000"
-          >
-            Sign in
-          </Link>
-        </div>
+    <section className="bg-[#4a3948] px-6 py-28 text-center text-[#f0e9e7] sm:px-10 sm:py-40">
+      <div className="mx-auto max-w-[900px]">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.25em] text-[#cbbbc4]">Ready when the film is</p>
+        <h2 className="mt-8 font-display text-[clamp(4rem,7vw,7.5rem)] leading-[0.86] tracking-[-0.05em]">Know before you deliver.</h2>
+        <p className="mx-auto mt-7 max-w-[36rem] text-base leading-relaxed text-[#ded3d8]">Measure the master, prepare every destination, and send a package that carries its own evidence.</p>
+        <Link href="/projects" className="mt-9 inline-flex rounded-[4px] bg-[#efe7e4] px-7 py-3.5 text-sm font-medium text-[#40333f] transition hover:bg-white">Prepare your film</Link>
       </div>
     </section>
   );
 }
 
 export function LandingFooter() {
-  return (
-    <footer className="border-t border-line px-6 py-10">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-4">
-        <p className="slate text-paper-400">Preflight</p>
-        <p className="max-w-measure text-xs leading-relaxed text-paper-400">
-          Preflight checks a delivery against the requirements a destination has
-          published. It does not speak for any festival, platform or
-          distributor, and cannot promise that a delivery will be accepted.
-        </p>
-      </div>
-    </footer>
-  );
+  return <footer className="bg-[#4a3948] px-6 pb-10 text-[#cbbbc4] sm:px-10"><div className="mx-auto flex max-w-[1160px] items-center justify-between border-t border-white/10 pt-8 text-[10px] uppercase tracking-[0.2em]"><span>Pre—flight</span><span>Finished media / ready to travel</span></div></footer>;
 }

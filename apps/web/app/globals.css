@@ -125,6 +125,22 @@ body {
   filter: drop-shadow(10px 0 24px rgba(217, 164, 65, 0.16));
   will-change: transform, opacity;
 }
+
+.hero-image-field {
+  --screening-drift: 0px;
+  --projector-drift: 0px;
+}
+
+.hero-screening-image {
+  transform: translate3d(0, var(--screening-drift), 0);
+  will-change: transform;
+}
+
+.hero-projector-image {
+  transform: translate3d(0, var(--projector-drift), 0);
+  will-change: transform;
+}
+
 .still-scrim {
   background: linear-gradient(
     to top,
@@ -191,6 +207,12 @@ body {
   .reduced-only {
     display: block !important;
   }
+
+  .hero-screening-image,
+  .hero-projector-image {
+    transform: none !important;
+  }
+
 }
 
 .reduced-only {

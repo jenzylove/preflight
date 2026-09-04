@@ -1,33 +1,25 @@
-import { Hero, HeroStatic } from "@/components/landing/Hero";
+import { Hero } from "@/components/landing/Hero";
 import {
-  CurrentRequirements,
-  EveryDeliveryKeepsItsEvidence,
+  Checks,
+  DestinationReadiness,
   FinalCall,
   LandingFooter,
-  MeasureNeverGuess,
-  OneMasterManyDestinations,
-  SafeRepairsStaySafe,
+  Workflow,
 } from "@/components/landing/Sections";
 
 /**
  * The public landing page.
  *
- * The hero is a scroll-driven sequence; everything below it is static. Both
- * are rendered, and CSS decides which hero the viewer gets — the animated one
- * by default, the static exploded diagram when motion is reduced. Doing that
- * in CSS rather than JavaScript means the correct version is present in the
- * very first paint, with no flash of the wrong one.
+ * A static-first editorial page. The authenticated workspace lives on its own
+ * routes and does not share these presentation components.
  */
 export default function Home() {
   return (
     <main id="main">
       <Hero />
-      <HeroStatic />
-      <OneMasterManyDestinations />
-      <CurrentRequirements />
-      <MeasureNeverGuess />
-      <SafeRepairsStaySafe />
-      <EveryDeliveryKeepsItsEvidence />
+      <Workflow />
+      <Checks />
+      <DestinationReadiness />
       <FinalCall />
       <LandingFooter />
     </main>
