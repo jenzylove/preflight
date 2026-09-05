@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Preflight">
+  <!-- The wordmark's em dash, set in the landing page's plum on its mauve. -->
+  <rect width="32" height="32" rx="6" fill="#3f323e"/>
+  <rect x="7" y="15" width="18" height="2.5" rx="1.25" fill="#e6dde2"/>
+</svg>

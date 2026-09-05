@@ -66,9 +66,41 @@ export function DestinationReadiness() {
             <p className="max-w-[39rem] text-lg leading-relaxed text-[#554551]">Festivals and platforms do not ask for the same thing. Preflight reads the current specification, prepares the right version, and records why each decision was made.</p>
           </div>
         </div>
-        <div className="mt-20 grid gap-px overflow-hidden rounded-[4px] bg-[#695666]/20 md:grid-cols-2">
-          <article className="bg-[#b7a9b5] p-8 sm:p-11"><p className={eyebrow}>Berlinale</p><h3 className="mt-12 font-display text-4xl">Burned-in subtitles.</h3><p className="mt-4 text-sm leading-relaxed text-[#554551]">A package built to the festival’s published picture and subtitle specification.</p></article>
-          <article className="bg-[#b7a9b5] p-8 sm:p-11"><p className={eyebrow}>Artdocfest</p><h3 className="mt-12 font-display text-4xl">SubRip beside the film.</h3><p className="mt-4 text-sm leading-relaxed text-[#554551]">The same master leaves differently because the destination requires it.</p></article>
+        {/* The section's whole claim is that these two destinations want
+            different things, so they have to read as two. A single panel with
+            a hairline seam merged them into one block and said the opposite. */}
+        <div className="mt-20 grid gap-10 md:grid-cols-2 md:gap-0">
+          {[
+            {
+              destination: "Berlinale",
+              requirement: "Burned-in subtitles.",
+              detail:
+                "A package built to the festival’s published picture and subtitle specification.",
+            },
+            {
+              destination: "Artdocfest",
+              requirement: "SubRip beside the film.",
+              detail:
+                "The same master leaves differently because the destination requires it.",
+            },
+          ].map((entry, index) => (
+            <article
+              key={entry.destination}
+              className={`border-t border-[#5f4c5b]/35 pt-7 md:pt-8 ${
+                index === 1
+                  ? "md:border-l md:border-l-[#5f4c5b]/25 md:pl-12"
+                  : "md:pr-12"
+              }`}
+            >
+              <p className={eyebrow}>{entry.destination}</p>
+              <h3 className="mt-5 font-display text-[clamp(2rem,3.2vw,2.75rem)] leading-[1.05]">
+                {entry.requirement}
+              </h3>
+              <p className="mt-4 max-w-[26rem] text-sm leading-relaxed text-[#554551]">
+                {entry.detail}
+              </p>
+            </article>
+          ))}
         </div>
         <div className="mt-16 grid gap-8 border-t border-[#665361]/20 pt-10 sm:grid-cols-3">
           {[['Current', 'Requirements are retrieved, dated and hashed.'], ['Safe', 'Only deterministic repairs run after approval.'], ['Traceable', 'The package carries its sources and transformations.']].map(([title, body]) => <div key={title}><p className="font-display text-3xl">{title}</p><p className="mt-3 max-w-[18rem] text-sm leading-relaxed text-[#5b4a57]">{body}</p></div>)}
