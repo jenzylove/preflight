@@ -31,6 +31,21 @@ class Settings(BaseSettings):
     vertex_model: str = Field(default="gemini-2.5-pro")
     firebase_project_id: str = Field(default="")
     worker_base_url: str = Field(default="http://localhost:8080")
+
+    #: Browser origins allowed to call this API, comma separated.
+    #:
+    #: The browser is a first-class client - it holds the ID token and makes
+    #: every product call - so without this the workspace cannot reach the API
+    #: at all. It is an explicit list rather than a wildcard: this API serves
+    #: unreleased films, and any page on any origin being able to read a
+    #: response is not a trade worth making for convenience.
+    web_origins: str = Field(
+        default="https://preflight-web-584136898465.us-central1.run.app"
+    )
+
+    @property
+    def allowed_origins(self) -> list[str]:
+        return [o.strip() for o in self.web_origins.split(",") if o.strip()]
     worker_service_account: str = Field(default="")
 
     max_upload_bytes: int = Field(default=2 * 1024 * 1024 * 1024)

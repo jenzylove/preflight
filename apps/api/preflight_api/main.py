@@ -12,6 +12,7 @@ import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Response, status
+from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 
@@ -61,6 +62,21 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+
+# Without this the workspace cannot call the API from a browser at all: every
+# request is a cross-origin one, and the preflight is refused before the
+# request is ever made. Origins are listed explicitly rather than wildcarded,
+# because a wildcard would let any page anywhere read these responses.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_settings().allowed_origins,
+    # The browser sends a bearer token in a header, never a cookie, so
+    # credentialed requests are not needed and are not permitted.
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
+    max_age=3600,
+)
 
 app.include_router(projects_router)
 app.include_router(assets_router)
