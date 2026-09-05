@@ -30,3 +30,4 @@ packages/fixtures/malformed/
 *.mp4
 *.mov
 *.wav
+apps/web/*.mjs
