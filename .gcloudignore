@@ -1,0 +1,24 @@
+# What Cloud Build does NOT need in the upload.
+#
+# This file exists so the upload stops inheriting .gitignore. It did, and a
+# broad "apps/web/*.mjs" rule there quietly excluded next.config.mjs, which
+# meant the container built without `output: "standalone"` and the image COPY
+# failed on a directory Next had never been asked to produce.
+.git
+.github
+.venv
+node_modules
+out
+work
+.secrets
+.env
+*.mp4
+*.mov
+*.wav
+packages/fixtures
+**/__pycache__
+**/.pytest_cache
+**/.ruff_cache
+apps/web/node_modules
+apps/web/.next
+*.tsbuildinfo
