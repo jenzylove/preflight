@@ -14,17 +14,14 @@ import { authConfigured, signOut, watchUser } from "@/lib/auth";
  * project state and no demo account with pre-seeded data. Signing in creates a
  * real, empty account, and the first thing in it is whatever the user uploads.
  *
- * The chrome is deliberately thin. Three destinations in the nav, no sidebar,
- * no counters. The project is the mental model; anything that competes with it
- * is noise on the screen where someone is deciding whether their film can
- * ship.
+ * The chrome is deliberately thin. The project is the mental model; anything
+ * that competes with it is noise on the screen where someone is deciding
+ * whether their film can ship.
  */
 
-const NAV = [
-  { href: "/projects", label: "Projects" },
-  { href: "/deliveries", label: "Deliveries" },
-  { href: "/settings", label: "Settings" },
-];
+//: Only routes that exist. A nav item pointing at nothing is worse than no
+//: nav item, and this list is the one place that is easy to get wrong.
+const NAV = [{ href: "/projects", label: "Projects" }];
 
 export function Workspace({
   children,
