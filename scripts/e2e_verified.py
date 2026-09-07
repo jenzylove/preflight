@@ -74,31 +74,72 @@ def request(url, method="GET", body=None, token=None, timeout=300):
     return 0, f"transport failure: {last}"
 
 
-#: Requirements extraction misread, each with the reason a producer would give.
-#: These are set aside through the product's own mechanism, not filtered out.
+#: Requirements extraction misread, identified precisely.
+#:
+#: A misread is a specific rule - an asset type, a field, an operator and a
+#: value - never a whole field. Artdocfest publishes the audio data rate twice:
+#: once as "Audio Data rate - 320 kbit/s" with no operator, which was extracted
+#: as an exact equality, and once as "Audio Bitrate: from 320 kbit/s", which was
+#: extracted correctly as a floor. Matching on (asset type, field) alone set
+#: both aside, so a package delivering 212 kbit/s verified against a festival
+#: that publishes a 320 kbit/s minimum. The floor stays in force here, and the
+#: repair encodes above it.
 MISREADS = [
     (
-        ("audio", "loudnessRangeLu"),
-        "The source states 'Dynamic range 25 - 30dB', which is a peak-to-average "
-        "figure in dB. Preflight measures EBU R128 Loudness Range in LU. These "
-        "are different quantities and the comparison is not meaningful.",
+        ("audio", "loudnessRangeLu", "between"),
+        "The source states 'Dynamic range: 25 - 30dB', a peak-to-average figure "
+        "in dB. Preflight measures EBU R128 Loudness Range in LU. These are "
+        "different quantities and the comparison is not meaningful.",
     ),
     (
-        ("package", "fileNamePattern"),
+        ("package", "fileNamePattern", "eq"),
         "ISDCF is the name of a naming convention, not a filename pattern. The "
-        "extracted rule compares our filename against the string 'ISDCF'.",
+        "extracted rule compares the filename against the name of the standard.",
     ),
     (
-        ("audio", "bitrateBps"),
-        "The source states 'Bitrate from 320 kbit/s', which is a minimum. This "
-        "rule was extracted as an exact equality.",
+        ("audio", "bitrateBps", "eq"),
+        "This page states the audio data rate as a bare figure with no operator, "
+        "and the same festival's technical requirements page states 'from 320 "
+        "kbit/s'. It is a floor. The floor itself is left in force and measured.",
     ),
     (
-        ("audio", "truePeakDbtp"),
-        "The source states '-3 (Peak)', which is a ceiling. This rule was "
-        "extracted as an exact equality.",
+        ("audio", "truePeakDbtp", "eq"),
+        "The source states '-3 (Peak)', which is a ceiling. Read as an exact "
+        "equality it demands a true peak of exactly -3.00 dBTP, which no real "
+        "programme lands on. The 'lte -3' readings are left in force.",
     ),
 ]
+
+#: Never set aside, whatever else matches. These are correct readings of
+#: requirements the destination really publishes, and dismissing one would make
+#: VERIFIED meaningless.
+MUST_STAY_IN_FORCE = {
+    ("audio", "bitrateBps", "gte"),
+}
+
+
+def is_misread(rule: dict) -> bool:
+    """Does this exact rule match a known misreading?
+
+    Matches on the operator as well as the field, and refuses to touch a rule
+    on the keep list or one that is context-only. A context rule is retained
+    for the reader and never asserted, so setting it aside changes no verdict
+    and only adds noise to the passport.
+    """
+    signature = (rule["asset_type"], rule["field"], rule["operator"])
+    if signature in MUST_STAY_IN_FORCE:
+        return False
+    if rule.get("severity") == "context":
+        return False
+    return any(signature == target for target, _ in MISREADS)
+
+
+def reason_for(rule: dict) -> str:
+    signature = (rule["asset_type"], rule["field"], rule["operator"])
+    for target, reason in MISREADS:
+        if signature == target:
+            return reason
+    raise KeyError(signature)
 
 
 def main() -> int:
@@ -174,20 +215,28 @@ def main() -> int:
     print("\nSETTING ASIDE MISREAD REQUIREMENTS")
     status, rules = request(f"{API}/v1/projects/{project_id}/rules", token=token)
     set_aside = 0
-    for (asset_type, field_name), reason in MISREADS:
-        targets = [
-            r for r in rules
-            if r["asset_type"] == asset_type and r["field"] == field_name
-        ]
-        for rule in targets:
-            status, _ = request(
-                f"{API}/v1/projects/{project_id}/rules/{rule['rule_id']}/disposition",
-                "PUT", {"action": "set_aside", "reason": reason}, token=token,
-            )
-            if status == 200:
-                set_aside += 1
+    for rule in [r for r in rules if is_misread(r)]:
+        status, _ = request(
+            f"{API}/v1/projects/{project_id}/rules/{rule['rule_id']}/disposition",
+            "PUT", {"action": "set_aside", "reason": reason_for(rule)}, token=token,
+        )
+        if status == 200:
+            set_aside += 1
+            print(f"      set aside {rule['rule_id']}: {rule['asset_type']}."
+                  f"{rule['field']} {rule['operator']} {rule['expected']!r}")
     check("misread requirements set aside with a stated reason", set_aside > 0,
           f"{set_aside} rules, each recorded and carried into the passport")
+
+    kept = [
+        r for r in rules
+        if (r["asset_type"], r["field"], r["operator"]) in MUST_STAY_IN_FORCE
+        and r.get("disposition") != "set_aside"
+    ]
+    for rule in kept:
+        print(f"      still in force {rule['rule_id']}: {rule['asset_type']}."
+              f"{rule['field']} {rule['operator']} {rule['expected']!r}")
+    check("the published audio bitrate floor is still asserted", bool(kept),
+          f"{len(kept)} rule(s) the delivery must actually satisfy")
 
     print("\nPREFLIGHT")
     status, run = request(

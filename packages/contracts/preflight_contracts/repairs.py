@@ -77,6 +77,25 @@ def _run(args: list[str]) -> subprocess.CompletedProcess[str]:
     return subprocess.run(args, capture_output=True, text=True, check=False)
 
 
+#: Bitrate for the audio Preflight re-encodes, in bits per second.
+#:
+#: Festivals publish audio data rate as a floor - Artdocfest states "Audio
+#: Bitrate: from 320 kbit/s" - so the delivered file has to *measure* at or
+#: above it. That rules out FFmpeg's native AAC encoder: it treats -b:a as a
+#: hint and saturates near 139 kbit/s on sparse programme material no matter
+#: what is asked of it, so a package built with "-b:a 384k" measured 212 kbit/s
+#: and failed a requirement the festival really does publish. libfdk_aac is not
+#: in the image and aac_mf is not on Linux.
+#:
+#: AC-3 is constant bitrate: asked for 384k it measures exactly 384000. It is
+#: also what these masters already carry, and it satisfies the same published
+#: codec rule, which lists AAC and AC-3 side by side.
+#:
+#: The headroom over 320000 is deliberate. The floor is the number that must
+#: hold after encoding, not the number to aim at.
+DELIVERY_AUDIO_BITRATE_BPS = 384_000
+
+
 def _guard(source: Path, output: Path) -> None:
     """The original is immutable. Refuse any operation that would overwrite it."""
     if output.resolve() == source.resolve():
@@ -94,6 +113,7 @@ def normalise_loudness(
     target_lufs: float,
     true_peak_dbtp: float = -3.0,
     loudness_range_lu: float = 11.0,
+    audio_bitrate_bps: int = DELIVERY_AUDIO_BITRATE_BPS,
 ) -> RepairResult:
     """Two-pass EBU R128 normalisation to a destination's published target.
 
@@ -121,7 +141,7 @@ def normalise_loudness(
         "ffmpeg", "-y", "-hide_banner", "-nostats", "-i", str(source),
         "-map", "0:v?", "-c:v", "copy",          # picture passes through untouched
         "-map", "0:a", "-af", loudnorm,
-        "-c:a", "aac", "-b:a", "384k", "-ar", "48000",
+        "-c:a", "ac3", "-b:a", f"{audio_bitrate_bps // 1000}k", "-ar", "48000",
         "-movflags", "+faststart",
         str(output),
     ])
@@ -140,6 +160,8 @@ def normalise_loudness(
             "measuredInLufs": measured["integratedLoudnessLufs"],
             "measuredInTruePeakDbtp": measured["truePeakDbtp"],
             "mode": "linear",
+            "audioCodec": "ac3",
+            "audioBitrateBps": audio_bitrate_bps,
         },
         input_sha256=sha256_file(source),
         output_sha256=sha256_file(output),
