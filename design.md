@@ -1,4 +1,8 @@
-# Preflight Design Direction
+# Preflight design
+
+A record of the design as it shipped, not a brief for one still to be made.
+Where it states a rule, that rule holds in the deployed product and there is
+usually a check that says so.
 
 ## Product
 
@@ -16,9 +20,9 @@ A filmmaker gives Preflight a finished master and its destinations.
 
 Preflight retrieves the destinations' current delivery requirements, measures the real media, exposes mismatches and conflicts, proposes safe repairs, refuses unsafe automatic work, independently verifies resulting packages, and creates evidence-backed delivery artifacts.
 
-The product is already functional.
-
-This design pass is not an opportunity to reinvent the product or replace working functionality.
+Every screen described here is connected to that live backend. No screen in the
+authenticated product renders invented data, and a new account genuinely starts
+empty rather than seeded with a sample film.
 
 ---
 
@@ -62,237 +66,82 @@ The actual product workspace should become calmer and more precise.
 
 ---
 
-# Primary motion reference
-
-Use the supplied motion video as the PRIMARY reference for art direction and choreography.
-
-Do not copy its branding, text, subject matter, flower/object, layout literally, or visual assets.
-
-Study:
-
-the amount of negative space
-
-the scale of the primary visual
-
-how elements occupy depth
-
-the slow continuous motion
-
-how scroll changes the composition
-
-how objects overlap
-
-how typography participates in the composition
-
-the easing and pacing
-
-how little conventional card UI is visible
-
-how the page feels designed as one scene rather than assembled from sections
-
-Translate those principles into Preflight.
-
-Do not combine multiple unrelated visual styles.
-
----
-
-# Landing hero
-
-This is the most important visual moment in the product.
-
-Do not begin with a dashboard screenshot.
-
-Do not begin with a conventional centered SaaS heading and product card.
-
-The hero should feel spatial and cinematic.
-
-## Scene
-
-Start with a finished film represented as one beautiful cinematic frame suspended in a dark environment.
-
-The film frame is the central sculptural object of the hero.
-
-It should feel almost physical.
-
-Use subtle depth.
-
-Allow restrained pointer movement on desktop if it improves the composition.
-
-## Scroll choreography
-
-As the user begins scrolling, the finished film separates into an exploded technical view.
-
-The layers represent:
-
-Picture
-
-Audio waveform
-
-Subtitle track
-
-Metadata
-
-Destination specification
-
-These must remain part of ONE visual composition.
-
-Do not turn them into five floating dashboard cards.
-
-They should separate in depth and position as though Preflight is opening the finished film and inspecting everything inside it.
-
-Small technical labels may accompany the layers.
-
-Examples:
-
-PICTURE
-
-AUDIO · -19.4 LUFS
-
-SUBTITLES · SRT
-
-METADATA
-
-DESTINATION SPEC
-
-The exact displayed illustrative values may be adjusted for composition, but authenticated product measurements must always come from real data.
-
-## Inspection moment
-
-Destination requirements begin visually aligning against the appropriate film layers.
-
-Show a restrained combination of:
-
-verified property
-
-warning
-
-requirement mismatch
-
-destination conflict
-
-Do not flood the hero with statuses.
-
-The animation is communicating what Preflight does, not reproducing the entire compatibility matrix.
-
-## Resolution
-
-After inspection, the layers should resolve back toward a coherent object.
-
-The result should visually become a prepared destination package.
-
-The final state should communicate:
-
-VERIFIED
-
-or an equivalent product state.
-
-Then land the primary copy:
-
-# Your film is finished.
-
-# Make sure it's ready to leave.
-
-Primary CTA:
-
-**Prepare your film**
-
-Secondary:
-
-**Sign in**
-
-The product name PRE­FLIGHT should have strong presence but should not compete with the main statement.
-
----
-
-# Hero movement
-
-Motion should feel:
-
-slow
-
-deliberate
-
-smooth
-
-expensive
-
-spatial
-
-restrained
-
-Never frantic.
-
-Never bouncy.
-
-Never playful.
-
-Never like a template animation.
-
-Use GSAP / ScrollTrigger where appropriate.
-
-Use CSS 3D transforms where enough.
-
-Only introduce Three.js or React Three Fiber if genuine three-dimensional rendering materially improves the composition.
-
-Do not add heavy technology merely because it sounds advanced.
-
-The hero must remain performant.
-
-Reduced motion users should receive a strong static or lightly animated version of the same composition.
-
----
-
-# Landing page after hero
-
-The hero is the spectacle.
-
-The rest of the landing page should become increasingly restrained.
-
-Do not try to make every section another Awwwards experiment.
-
-The supporting story should cover:
-
-## One finished master. Different destinations.
-
-Visualize one film branching toward destination-specific requirements.
-
-## Requirements change.
-
-Show that Preflight retrieves current specifications and keeps their source evidence.
-
-## Measure, never guess.
-
-Show film properties and technical measurement elegantly.
-
-## Safe repairs stay safe.
-
-Explain the existing Green / Yellow / blocked model without making the UI childish.
-
-## Verify the result.
-
-Communicate that worker completion is not trusted automatically.
-
-The result is independently remeasured.
-
-## Every delivery keeps its evidence.
-
-Introduce:
-
-packages
-
-passport
-
-provenance
-
-sources
-
-hashes
-
-delivery room
-
-Finish with the primary CTA again.
-
----
+# Landing page, as shipped
+
+The public page is one editorial composition in a dusty mauve palette, not a
+scene the reader has to drive. It was an animated exploded-film sequence
+earlier in the build - a finished frame that came apart into picture, audio,
+subtitles, metadata and a destination specification across roughly five
+viewport heights. That is gone, deliberately, and should not come back. It
+asked the reader to scroll a long way before the page said anything, and the
+argument it made in motion is made faster in words and pictures.
+
+## Hero
+
+Palette `#b7a9b5`, with a soft radial wash toward the upper left. Everything
+is set in the dark plum `#382d37`.
+
+Left column, in reading order:
+
+- the wordmark, small, `PRE—FLIGHT`, uppercase with wide tracking
+- the headline, in the display serif at `clamp(4.6rem, 8.2vw, 8.8rem)`, set on
+  three lines: *Ready before / it leaves / your hands.*
+- one paragraph of plain description
+- the primary call to action, **Prepare your film**, going to `/projects`
+
+Right column, desktop only: two photographic images in soft organic crops -
+a projector lens above right, a cinema auditorium below it, overlapping
+slightly. Below the `lg` breakpoint the projector is dropped and the
+auditorium image moves under the copy, because two overlapping crops in a
+narrow column read as clutter rather than composition.
+
+**Sign in** sits top right, quiet.
+
+## Hero motion
+
+A single parallax: the two images drift upward as the page scrolls, capped at
+30px and 16px respectively over the first viewport height. It is driven by one
+passive scroll listener writing two CSS custom properties on animation frames.
+No animation library, no pinning, no scroll timeline.
+
+It is deliberately almost imperceptible. It exists so the images sit in the
+page rather than on it. Under `prefers-reduced-motion` both offsets are set to
+zero and nothing else changes, because there is nothing else to change.
+
+## The rule the hero must keep
+
+The images never overlap the headline, the paragraph or the call to action.
+This is checkable rather than a matter of taste: at the centre of the headline
+and the centre of the CTA, the topmost painted element must be that element
+itself. `scripts/shoot.mjs` asserts exactly that at 1440, 1280 and 390, and
+also that the document never scrolls horizontally.
+
+## Below the hero
+
+Four sections, alternating between `#c9bec4` and `#b7a9b5`, closing on the
+dark plum `#4a3948`. They get progressively quieter; the hero is the only
+place that raises its voice.
+
+1. **From finished master to confident delivery** - three numbered steps,
+   separated by hairlines.
+2. **Every part of the film that has to arrive intact** - a finishing-suite
+   photograph beside a ruled list of what gets measured.
+3. **One master. Different ways out** - the Berlinale and Artdocfest
+   requirements as two columns divided by a real vertical rule. They were one
+   filled panel with a one-pixel seam and read as a single block, which said
+   the opposite of the heading above them.
+4. **Know before you deliver** - the closing statement and the call to action
+   again, on plum.
+
+Separation across the page is done with hairlines and typography rather than
+filled cards, which is why section three had to change to match.
+
+## What the marketing page may and may not assert
+
+The four checks listed in section two - picture, sound, subtitles, metadata -
+are categories, not measurements. No number on the public page is presented as
+having been measured from anyone's film. Every measurement shown inside the
+authenticated product comes from the worker having opened the actual file.
 
 # Public versus authenticated experience
 

@@ -1,103 +1,120 @@
 # Demo runbook
 
-Everything below runs against real files, real published requirements and real
-provider calls. There is no seeded state and no recorded response. If a step
-fails, it failed — that is the point of writing it down this way.
+Everything below runs against the deployed system with real provider calls.
+There is no seeded state, no recorded response and no demo account with a
+sample film in it. If a step fails, it failed — which is the point of writing
+it down this way.
+
+- Frontend: <https://preflight-web-584136898465.us-central1.run.app>
+- API: <https://preflight-api-584136898465.us-central1.run.app>
 
 ## Before recording
 
 ```bash
-python scripts/gate0/make_fixture.py     # synthesise the malformed master
-python -m pytest -q                       # 141 tests
+python scripts/gate0/make_fixture.py              # the deliberately broken master
+python scripts/gate0/make_deliverable_fixture.py  # the one built to be delivered
+python -m pytest -q                                # 193 tests
 ```
 
-Confirm `ffmpeg` and `ffprobe` are on PATH, and that `.env` carries
-`PARALLEL_API_KEY`, `GOOGLE_CLOUD_PROJECT` and `GOOGLE_APPLICATION_CREDENTIALS`.
+Then, in a browser:
+
+1. Sign up a fresh account. It will be empty, which is what you want on
+   camera — the empty state is part of the argument.
+2. Create the project and **upload the master ahead of time**. The deliverable
+   fixture is 72 MB and the upload plus server-side measurement is the slowest
+   thing in the product. Do not spend demo time watching a progress bar.
+3. Run preflight once so the requirements are retrieved and cached, then stop.
+   Leave the repair plan unapproved — approving it live is the good moment.
+
+Have a second tab open on the landing page.
 
 ## The 90 seconds
 
 ### 1. The problem, stated once (0:00–0:10)
 
-> A finished film goes to several places. Each one publishes different
-> technical requirements, those requirements change, and around a quarter of
-> first submissions fail technical QC. Usually for something a machine could
-> have measured.
+Open the landing page.
 
-### 2. Retrieval, live (0:10–0:30)
+> A finished film goes to several places. Each publishes different technical
+> requirements, those requirements change, and around a quarter of first
+> submissions fail technical QC — usually for something a machine could have
+> measured.
 
-```bash
-python scripts/gate3/run_extraction.py
-```
+Scroll once to *One master. Different ways out.* Do not narrate the page.
 
-On screen, in order:
+### 2. What the film actually is (0:10–0:30)
 
-- **Eight sources retrieved, two official.** The tier column is visible.
-  Six are withheld as unverified — including, on a real run, a marketing blog
-  and a Wikipedia page.
-- **"extracting from 2 trusted sources (6 withheld as unverified)"**
-- **Rules demoted by tier.** For Artdocfest: 126 rules extracted, 66 mandatory,
-  60 demoted to context because of where they came from.
-- **A live ambiguity.** Artdocfest publishes its requirements in English and in
-  Russian, and the two pages state different video bitrates. Preflight marks
-  the requirement AMBIGUOUS and shows both URLs. Nobody constructed this case.
+Go to the project's **Master** step.
 
-Say plainly: *the model reads; it does not decide what to trust.*
+Point at the measured properties and say where they came from:
 
-### 3. The conflict (0:30–0:45)
+> Nothing here was typed in or guessed. Preflight opened the file on the
+> server and measured it, and the tool and version that did it are recorded
+> next to the numbers.
 
-```bash
-python scripts/gate0/check_conflicts.py
-```
+Expand **Provenance**. Show the SHA-256 and that the original is immutable.
 
-```
-[HARD] subtitle.burnedIn
-  berlinale    required  eq True
-    |- berlinale.de/...  "All ProRes subtitles must be burned-in.
-                          Subtitles delivered as a separate file will not be accepted."
-  artdocfest   required  eq False
-    |- artdocfest.com/... "Subtitles: SubRip (.srt). Burned-in subtitles are not allowed."
-```
+### 3. Published beside measured (0:30–0:50)
 
-> Two real festivals. Directly contradictory. Preflight quotes each one's own
-> words and builds a separate version for each, rather than guessing which
-> matters more.
+Go to **Preflight**.
 
-### 4. Measure, repair, re-measure (0:45–1:15)
+The screen to linger on. Two things to point at:
 
-```bash
-python scripts/gate0/run_spike.py
-```
-
-Point at four things:
-
-| On screen | Why it matters |
+| On screen | Say |
 |---|---|
-| `integrated loudness -4.85 LUFS` against a published `-18..-21` window | The single most common rejection cause, measured not guessed |
-| `REVIEW video.codec` — ProRes required, H.264 supplied | Preflight refuses to re-encode the picture silently |
-| `original sha256 unchanged  True` | The master is untouched |
-| `repaired picture identical to original  True` — same MD5 before and after | The metadata repair provably did not touch the image |
+| A failing row, published value beside measured value | "The requirement, and what the file actually is. Never collapsed into a score." |
+| **Where this comes from** on that row | "Every requirement is quoted from the destination's own page, with the date it was retrieved." |
 
-Then the decision block, including the line that says Berlinale is **not**
-ready. Do not skip it:
+If both destinations are selected, the conflict card sits above everything:
 
-> Artdocfest is ready. Berlinale is not, because it needs a ProRes master and
-> burned-in subtitles, and neither is something Preflight will do to your film
-> without asking. It tells you, and stops.
+> The Berlinale requires burned-in subtitles. Artdocfest forbids them and
+> wants a SubRip file. No single delivery satisfies both, so Preflight builds
+> two — and quotes each festival's own sentence for why.
 
-### 5. The receipt (1:15–1:30)
+### 4. What it will and will not do (0:50–1:10)
 
-Open the passport. Show original hashes, each transformation, the rule pack
-version, the cited sources with retrieval dates, and the limitations block —
-which always ends with:
+Go to **Repair**.
 
-> Preflight verifies this package against the destination requirements
-> published at the retrieval dates recorded below. It is not a guarantee that
-> the destination will accept this delivery.
+> Green is what Preflight will do: deterministic, and it never writes to your
+> original. Yellow it shows you and refuses to run, because re-encoding the
+> picture changes the film and that is not a decision a tool should make
+> quietly.
+
+Approve the green plan on camera. Then, while it runs:
+
+> The worker reports success when it finishes. Preflight does not take its
+> word for it.
+
+### 5. The recheck, and the receipt (1:10–1:30)
+
+Go to **Packages** when the job completes.
+
+Point at the transformations, and specifically at *picture bit-identical to
+your original* on the metadata repair.
+
+Then open the **Passport**: original hashes, what changed, whose requirements
+it was measured against and when they were retrieved, and the limitations —
+which always end with the line that Preflight verifies against published
+requirements and does not guarantee acceptance.
+
+Create a delivery room and open the link in a private window. Show that the
+recipient sees the package hash and the limitations, and nothing about the
+project, the owner or where the files are stored.
+
+## The parts worth showing that are easy to skip
+
+- **The empty state.** No sample project. It is evidence, not a gap.
+- **The destination Preflight cannot read.** On the Destinations step,
+  YouTube and Netflix are listed as unavailable with the reason. A product
+  that says what it cannot do is making a claim about the rest.
+- **A requirement set aside.** On a rule that was misextracted, open
+  **Review this requirement**: the source excerpt, the URL, and the mandatory
+  reason that ends up printed on the passport.
+- **Berlinale staying unverified.** That is the product working. Say so.
 
 ## What must be visible on screen
 
 - Official source URLs, with retrieval dates
-- Measured input properties, from ffprobe and ffmpeg
+- Measured input properties, and the tool that measured them
 - The original asset hash, unchanged
 - The decoded picture hash, identical before and after repair
 - Validator results measured from the built package
@@ -109,9 +126,26 @@ which always ends with:
 - Never "compliant". Say "meets published requirements as of *date*".
 - Never that a destination will accept the delivery.
 - Never that Preflight fixed something it only detected.
+- Never that a number on the landing page was measured from a real film. The
+  four checks listed there are categories, not measurements.
 
 ## If something fails live
 
 Say what failed and move on. The project's entire argument is that it reports
 what is true rather than what is convenient; a live failure handled honestly
 costs less than a rehearsed result that hides one.
+
+## Evidence, if a judge asks for it
+
+The scripts are the receipts behind the interface, and they run on their own:
+
+```bash
+python scripts/gate0/run_spike.py        # measure, compare, repair, re-measure
+python scripts/gate0/check_conflicts.py  # the destinations really do conflict
+python scripts/gate3/run_extraction.py   # live retrieval and extraction, scored
+python scripts/e2e_verified.py           # the whole path, against the deployment
+```
+
+`scripts/shoot.mjs` captures the landing page at desktop and mobile widths and
+asserts that nothing overlaps the headline or the call to action. It drives the
+system Chrome and needs `playwright-core` installed in `apps/web`.

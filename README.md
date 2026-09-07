@@ -33,7 +33,7 @@ Measured against the deployed system, not locally:
 
 ```
 mean extraction recall vs. human transcription   96%
-tests                                           190
+tests                                           193
 deployed end-to-end checks                       33
 packages reaching VERIFIED in deployment          1
 ```
@@ -43,13 +43,16 @@ retrieves Artdocfest's published requirements, corrects loudness and subtitle
 format, re-measures the built package independently, issues a passport and
 opens a delivery room a recipient can use.
 
-The interface has two registers. The public page is cinematic: one finished
-frame comes apart into picture, audio, subtitles and metadata, the
-destination's specification arrives as a plane that did not come from the film,
-and the whole thing resolves into a package carrying its own evidence. The
-workspace is the opposite - quiet, technical, and built so that a published
+The interface has two registers. The public page is editorial and cinematic:
+a dusty mauve composition, a display serif set large, and two photographic
+crops of a projector and an auditorium, with one barely perceptible parallax.
+The workspace is the opposite - quiet, technical, and built so that a published
 requirement always sits beside the measured reality rather than collapsing into
 a score.
+
+There is no sample project. A new account is genuinely empty, because a
+fabricated film inside a product about not fabricating things would undermine
+every claim the rest of the interface makes.
 
 Reproduce it:
 
@@ -199,6 +202,7 @@ packages/fixtures/      synthesised demo media (no third-party footage)
 scripts/                gate spikes, destination seeding, deployed end-to-end test
 infra/                  Terraform, Cloud Build configs, migrations
 docs/                   destination selection, trust model, threat model, runbook
+design.md               the design as shipped, and the rules it has to keep
 ```
 
 ### The journey

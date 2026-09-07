@@ -6,7 +6,12 @@
  * only a screenshot tells you whether the cinema image is sitting on top of
  * the headline.
  *
- *   node scripts/shoot.mjs [baseUrl] [outDir]
+ * Drives the system Chrome rather than downloading a browser, and is not part
+ * of the app build, so playwright-core is installed on demand rather than
+ * declared as a dependency:
+ *
+ *   cd apps/web && npm i -D playwright-core --no-save
+ *   node ../../scripts/shoot.mjs [baseUrl] [outDir]
  */
 
 import { chromium } from "playwright-core";
