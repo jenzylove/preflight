@@ -164,9 +164,30 @@ class Plan:
 
         Order-independent, so two runs that produce the same work in a
         different sequence approve the same thing.
+
+        This covers what is blocked and unresolved as well as what will run.
+        Those are not decoration: the plan screen shows them, the approval is
+        given in full view of them, and setting a misread requirement aside
+        changes them without changing a single step. Digesting the steps alone
+        made that edit invisible - the digest matched an executed plan, the
+        job was deduplicated as already running, and the package kept the
+        verdict and the limitations it had before the user's decision. The
+        person had done the one thing the product asked of them and nothing
+        moved.
         """
         payload = "|".join(sorted(s.fingerprint() for s in self.steps))
-        return hashlib.sha256(payload.encode()).hexdigest()[:32]
+        outstanding = "|".join(sorted(
+            json.dumps(
+                {k: entry.get(k) for k in ("destination", "field", "needs", "safety")},
+                sort_keys=True,
+                separators=(",", ":"),
+                default=str,
+            )
+            for entry in (*self.blocked, *self.unresolved)
+        ))
+        return hashlib.sha256(
+            f"{payload}#{outstanding}".encode()
+        ).hexdigest()[:32]
 
     def estimated_seconds(self, runtime_seconds: int) -> int:
         minutes = max(1, runtime_seconds / 60)

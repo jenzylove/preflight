@@ -124,3 +124,50 @@ class TestBrowserCanReachTheApi:
             "*",
             "https://not-preflight.example",
         )
+
+
+class TestTheBucketAcceptsTheSameOriginsAsTheApi:
+    """The upload is cross-origin too, and the bucket has to agree.
+
+    The browser sends the master straight to Cloud Storage with a signed URL,
+    so the bucket is a second CORS surface. It was missed: the API allowed the
+    web origin, the bucket allowed nothing, and every upload from the deployed
+    app died at the preflight while server-side clients kept working, because
+    they send no Origin header.
+
+    Reaching the live bucket from a unit test is not possible, so this asserts
+    the next best thing - that the infrastructure declares the same origins the
+    API trusts. An origin the API accepts but the bucket does not is an upload
+    the user can start and never finish.
+    """
+
+    def _cors_block(self) -> str:
+        from pathlib import Path
+
+        root = Path(__file__).resolve().parents[3]
+        text = (root / "infra" / "terraform" / "main.tf").read_text(encoding="utf-8")
+        assert "cors {" in text, "the media bucket declares no CORS policy"
+        return text
+
+    def test_the_media_bucket_declares_cors(self):
+        self._cors_block()
+
+    def test_every_origin_the_api_trusts_may_upload(self):
+        from preflight_api.core.config import get_settings
+
+        text = self._cors_block()
+        for origin in get_settings().allowed_origins:
+            assert origin in text, f"{origin} may call the API but may not upload"
+
+    def test_the_upload_methods_are_allowed(self):
+        """POST opens the resumable session, PUT sends the bytes."""
+        text = self._cors_block()
+        cors = text.split("cors {", 1)[1].split("}", 1)[0]
+        for method in ("PUT", "POST"):
+            assert f'"{method}"' in cors, f"{method} is not allowed on the bucket"
+
+    def test_the_bucket_is_not_open_to_every_origin(self):
+        """A signed URL is a bearer credential. Never a wildcard."""
+        text = self._cors_block()
+        cors = text.split("cors {", 1)[1].split("}", 1)[0]
+        assert '"*"' not in cors

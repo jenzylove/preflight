@@ -87,11 +87,41 @@ def _client():
     return storage.Client(project=settings.google_cloud_project), settings.gcs_bucket
 
 
-def create_resumable_upload_url(key: str, content_type: str, max_bytes: int) -> str:
+def upload_session_origin(requesting_origin: str | None, allowed: list[str]) -> str | None:
+    """Which origin, if any, a resumable session may be opened for.
+
+    Separated out because it is the security-relevant half of the upload
+    intent: opening a session for an origin returns a URL that origin can
+    write to. Only an origin already trusted to call the API qualifies.
+
+    An untrusted or absent Origin yields None rather than an error, because a
+    server-side client legitimately sends none and must still be able to
+    upload.
+    """
+    if requesting_origin and requesting_origin in allowed:
+        return requesting_origin
+    return None
+
+
+def create_resumable_upload_url(
+    key: str, content_type: str, max_bytes: int, origin: str | None = None
+) -> str:
     """A single-use, expiring URL that can write exactly one object.
 
     Resumable so that a large master survives the kind of flaky connection
     that would otherwise force a producer to restart a two-hour upload.
+
+    The origin is not decoration. The browser uploads to the returned session
+    URL with XHR, so that request is cross-origin, and Cloud Storage only
+    attaches the CORS headers to a resumable session that was opened with the
+    origin that will use it. Opened without one, the session URL is unusable
+    from a browser - every PUT is blocked with no 'Access-Control-Allow-Origin'
+    header - while server-side clients keep working, because they send no
+    Origin at all. That is exactly how it shipped broken.
+
+    The caller passes the browser's own Origin only after checking it against
+    the allowlist, so this cannot be used to mint a session for any origin that
+    asks.
     """
     client, bucket_name = _client()
     settings = get_settings()
@@ -100,7 +130,7 @@ def create_resumable_upload_url(key: str, content_type: str, max_bytes: int) -> 
     return blob.create_resumable_upload_session(
         content_type=content_type,
         size=max_bytes,
-        origin=None,
+        origin=origin,
         timeout=settings.signed_url_ttl_seconds,
     )
 

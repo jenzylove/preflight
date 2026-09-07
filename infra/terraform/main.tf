@@ -34,6 +34,14 @@ variable "region" {
   default = "us-central1"
 }
 
+# Browser origins allowed to upload directly to the media bucket. This is the
+# same list the API allows as callers, and the two have to agree: an origin the
+# API trusts but the bucket does not can start an upload it can never finish.
+variable "web_origins" {
+  type    = list(string)
+  default = ["https://preflight-web-584136898465.us-central1.run.app"]
+}
+
 provider "google" {
   project = var.project_id
   region  = var.region
@@ -90,6 +98,23 @@ resource "google_storage_bucket" "media" {
     action {
       type = "Delete"
     }
+  }
+
+  # The browser uploads the master straight to this bucket with the signed URL
+  # the API issues, so the upload is cross-origin and the bucket has to say so.
+  # Without this every upload from the web app dies at the preflight with no
+  # 'Access-Control-Allow-Origin' header, while server-side clients keep
+  # working, because they send no Origin at all.
+  #
+  # Named origins rather than "*": a signed URL is a bearer credential, and
+  # letting any page on any origin drive one is not a trade worth making.
+  # POST opens the resumable session and PUT sends the bytes; Location is the
+  # session URL the client must read back to continue.
+  cors {
+    origin          = var.web_origins
+    method          = ["GET", "HEAD", "PUT", "POST", "OPTIONS"]
+    response_header = ["Content-Type", "Content-Range", "Location", "Range", "ETag", "x-goog-resumable"]
+    max_age_seconds = 3600
   }
 }
 

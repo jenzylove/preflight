@@ -51,7 +51,7 @@ gcloud run deploy preflight-api \
   --max-instances=10 \
   --add-cloudsql-instances="${PROJECT}:${REGION}:preflight-db" \
   --set-secrets="DATABASE_URL=database-url:latest,PARALLEL_API_KEY=parallel-api-key:latest" \
-  --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT},GCS_BUCKET=${BUCKET},GOOGLE_CLOUD_LOCATION=${REGION},WORKER_BASE_URL=${WORKER_URL},ENVIRONMENT=production"
+  --set-env-vars="GOOGLE_CLOUD_PROJECT=${PROJECT},GCS_BUCKET=${BUCKET},GOOGLE_CLOUD_LOCATION=${REGION},WORKER_BASE_URL=${WORKER_URL},ENVIRONMENT=production,FIREBASE_PROJECT_ID=${PROJECT},WORKER_SERVICE_ACCOUNT=${SA}"
 
 API_URL=$(gcloud run services describe preflight-api \
   --region="${REGION}" --project="${PROJECT}" --format='value(status.url)')

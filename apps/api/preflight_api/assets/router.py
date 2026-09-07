@@ -11,7 +11,7 @@ from __future__ import annotations
 import logging
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from preflight_contracts.state import ProjectState, transition_project
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -71,6 +71,7 @@ class AssetOut(BaseModel):
 @router.post("/upload-intent", response_model=UploadIntentOut, status_code=201)
 def create_upload_intent(
     payload: UploadIntent,
+    request: Request,
     project: Project = Depends(owned_project),
     session: Session = Depends(get_session),
 ) -> UploadIntentOut:
@@ -103,14 +104,21 @@ def create_upload_intent(
     session.add(asset)
     session.flush()
 
+    from ..core.config import get_settings
+
+    # Only an origin already on the allowlist may have a session opened for it.
+    # An unknown Origin is ignored rather than refused: the upload still works
+    # for server-side clients, which send none at all.
+    session_origin = storage.upload_session_origin(
+        request.headers.get("origin"), get_settings().allowed_origins
+    )
+
     try:
         url = storage.create_resumable_upload_url(
-            key, payload.content_type, payload.byte_size
+            key, payload.content_type, payload.byte_size, origin=session_origin
         )
     except storage.StorageError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-
-    from ..core.config import get_settings
 
     return UploadIntentOut(
         asset_id=asset.id,
