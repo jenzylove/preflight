@@ -33,6 +33,37 @@ ENV NEXT_PUBLIC_API_BASE_URL=$NEXT_PUBLIC_API_BASE_URL \
     NEXT_PUBLIC_FIREBASE_PROJECT_ID=$NEXT_PUBLIC_FIREBASE_PROJECT_ID \
     NEXT_TELEMETRY_DISABLED=1
 
+# Refuse to build an app nobody can sign in to.
+#
+# Because these are compiled into the bundle, a missing one is not a runtime
+# error that shows up in a log: the build succeeds, the deploy succeeds, the
+# page loads, and the only symptom is that authentication silently does not
+# exist. That shipped once, from a build invoked without its substitutions.
+#
+# The guard lives here rather than only in the Cloud Build config so that every
+# way of producing this image is covered, including a plain `docker build`.
+RUN set -eu; \
+    missing=""; \
+    for name in NEXT_PUBLIC_API_BASE_URL NEXT_PUBLIC_FIREBASE_API_KEY \
+                NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN NEXT_PUBLIC_FIREBASE_PROJECT_ID; do \
+      eval "value=\${$name}"; \
+      [ -n "$value" ] || missing="$missing $name"; \
+    done; \
+    if [ -n "$missing" ]; then \
+      echo "" >&2; \
+      echo "Refusing to build: missing build arguments:$missing" >&2; \
+      echo "" >&2; \
+      echo "These are compiled into the browser bundle, so an empty one produces" >&2; \
+      echo "an application that loads but cannot sign anyone in. Pass them:" >&2; \
+      echo "" >&2; \
+      echo "  gcloud builds submit --config=infra/cloudbuild-web.yaml \\" >&2; \
+      echo "    --substitutions=_TAG=v1,_FIREBASE_API_KEY=...,_FIREBASE_AUTH_DOMAIN=... ." >&2; \
+      echo "" >&2; \
+      echo "The values are the browser Firebase config in .env, which is public" >&2; \
+      echo "by design and is not a credential." >&2; \
+      exit 1; \
+    fi
+
 RUN pnpm build
 
 FROM node:22-slim AS run
