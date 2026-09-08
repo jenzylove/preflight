@@ -28,6 +28,19 @@ def configure_sessions(engine) -> sessionmaker[Session]:
     return _session_factory
 
 
+def session_factory(request: Request) -> sessionmaker[Session]:
+    """The factory itself, for work that outlives a request.
+
+    A background task cannot borrow the request's session: that session is
+    closed the moment the response is sent. It needs to open its own, which
+    means it needs the factory rather than a session.
+    """
+    if _session_factory is None:
+        configure_sessions(request.app.state.engine)
+    assert _session_factory is not None
+    return _session_factory
+
+
 def get_session(request: Request) -> Iterator[Session]:
     if _session_factory is None:
         configure_sessions(request.app.state.engine)

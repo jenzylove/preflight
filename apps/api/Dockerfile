@@ -13,6 +13,9 @@ WORKDIR /app
 
 COPY pyproject.toml ./
 COPY packages/contracts/ ./packages/contracts/
+# The agent is how a destination gets researched at runtime: Parallel finds
+# and reads the pages, Gemini structures only what passed the trust check.
+COPY apps/agent/ ./apps/agent/
 COPY apps/api/ ./apps/api/
 
 RUN pip install --no-cache-dir \
@@ -27,9 +30,10 @@ RUN pip install --no-cache-dir \
     "google-cloud-storage>=2.18" \
     "google-cloud-tasks>=2.16" \
     "firebase-admin>=6.5" \
-    "httpx>=0.28"
+    "httpx>=0.28" \
+    "google-genai>=1.0"
 
-ENV PYTHONPATH=/app/packages/contracts:/app/apps/api \
+ENV PYTHONPATH=/app/packages/contracts:/app/apps/agent:/app/apps/api \
     PYTHONUNBUFFERED=1
 
 USER preflight

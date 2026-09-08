@@ -15,21 +15,23 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from preflight_contracts.state import ProjectState, TransitionError, transition_project
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from ..auth.identity import owned_project
+from ..auth.identity import current_user, owned_project
 from ..core.db import get_session
 from ..core.models import (
     Destination,
+    DestinationResearch,
     Project,
     ProjectDestination,
     RulePackRow,
     RuleRow,
     SourceEvidenceRow,
+    User,
 )
 
 router = APIRouter(prefix="/v1", tags=["destinations"])
@@ -227,3 +229,81 @@ def get_destinations(
         selected=[_describe(d, session) for d in destinations],
         project_state=project.state,
     )
+
+
+# ---------------------------------------------------------------------------
+# Researching a destination Preflight has never seen
+# ---------------------------------------------------------------------------
+
+
+class ResearchIn(BaseModel):
+    #: What the person typed. "Sundance Film Festival", not a slug or a domain.
+    query: str = Field(min_length=2, max_length=200)
+
+
+class ResearchOut(BaseModel):
+    id: uuid.UUID
+    query: str
+    state: str
+    progress: str | None
+    official_sources: int
+    rejected_sources: int
+    total_rules: int
+    mandatory_rules: int
+    failure_reason: str | None
+    destination: DestinationOut | None
+
+
+def _research_out(job, session: Session) -> ResearchOut:
+    destination = None
+    if job.destination_id is not None and job.state == "READY":
+        row = session.get(Destination, job.destination_id)
+        if row is not None:
+            destination = _describe(row, session)
+    return ResearchOut(
+        id=job.id, query=job.query, state=job.state, progress=job.progress,
+        official_sources=job.official_sources, rejected_sources=job.rejected_sources,
+        total_rules=job.total_rules, mandatory_rules=job.mandatory_rules,
+        failure_reason=job.failure_reason, destination=destination,
+    )
+
+
+@router.post("/destinations/research", response_model=ResearchOut, status_code=202)
+def start_research(
+    payload: ResearchIn,
+    request: Request,
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> ResearchOut:
+    """Find out what a destination currently publishes.
+
+    Returns immediately with a row to watch. The work itself - searching,
+    reading, extracting - takes minutes and happens off this request, because
+    holding an HTTP connection open for that long is a promise about the
+    network that nobody can keep.
+    """
+    job = DestinationResearch(
+        requested_by=user.id, query=payload.query.strip(), state="QUEUED",
+        progress="Starting",
+    )
+    session.add(job)
+    session.commit()
+
+    from ..core.db import session_factory
+    from . import research as research_module
+
+    research_module.start(job.id, session_factory(request))
+    return _research_out(job, session)
+
+
+@router.get("/destinations/research/{job_id}", response_model=ResearchOut)
+def read_research(
+    job_id: uuid.UUID,
+    user: User = Depends(current_user),
+    session: Session = Depends(get_session),
+) -> ResearchOut:
+    job = session.get(DestinationResearch, job_id)
+    if job is None or job.requested_by != user.id:
+        # Indistinguishable: someone else's research is not theirs to discover.
+        raise HTTPException(status_code=404, detail="No such research")
+    return _research_out(job, session)

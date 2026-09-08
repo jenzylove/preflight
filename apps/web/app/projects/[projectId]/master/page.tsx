@@ -7,39 +7,46 @@ import { Working } from "@/components/Status";
 import { Workspace } from "@/components/workspace/Workspace";
 import { ProjectRail } from "@/components/workspace/Rail";
 import { api, uploadToSignedUrl } from "@/lib/api";
+import { codecName, formatDuration, resolutionName } from "@/lib/language";
 import type { Asset, Project } from "@/lib/types";
 
 /**
- * Handing Preflight the master.
+ * Handing Preflight the film.
  *
  * The upload goes straight from the browser to private storage using a signed
  * session the API issues for one object; the file never passes through the
- * API, which is why a feature-length master is possible at all.
+ * API, which is why a feature-length film is possible at all.
  *
- * Nothing on this page is measured in the browser. Every property shown comes
- * back from the worker after it has opened the file, which is why the tool and
- * its version are recorded next to the numbers.
+ * Nothing here is measured in the browser. Every property comes back from the
+ * worker after it opened the file, which is why the tool and its version are
+ * recorded beside the numbers.
+ *
+ * What changed on this screen is who it is written for. It used to greet
+ * someone who had just uploaded their film with two dozen rows of colour
+ * matrices, bitrates and hashes, and no visible next step. The measurements are
+ * the product and they are all still here — they are simply no longer the
+ * first thing between a person and the thing they came to do.
  */
 
 const SLOTS = [
   {
     role: "master",
-    title: "The master",
-    hint: "MP4 or QuickTime. This is the file everything else is measured against.",
+    title: "Your finished film",
+    hint: "The final cut, as an MP4 or QuickTime file. Everything else is checked against this.",
     accept: ".mp4,.mov,video/mp4,video/quicktime",
     required: true,
   },
   {
     role: "subtitle",
-    title: "Subtitles",
-    hint: "SubRip or WebVTT, as a separate file.",
+    title: "Subtitle file",
+    hint: "A .srt or .vtt file. Many festivals require subtitles for films not in their own language.",
     accept: ".srt,.vtt,text/vtt",
     required: false,
   },
   {
     role: "poster",
-    title: "Key art",
-    hint: "JPEG or PNG.",
+    title: "Poster or cover image",
+    hint: "A JPEG or PNG still. Festivals and platforms often ask for one alongside the film.",
     accept: ".jpg,.jpeg,.png,image/jpeg,image/png",
     required: false,
   },
@@ -74,60 +81,98 @@ function Master({ projectId }: { projectId: string }) {
 
   useEffect(() => {
     refresh().catch((caught) =>
-      setError(caught instanceof Error ? caught.message : "Could not load this project."),
+      setError(
+        caught instanceof Error ? caught.message : "Could not load this project.",
+      ),
     );
   }, [refresh]);
 
   if (error) {
     return (
-      <p role="alert" className="border-l-2 border-stop bg-stop-bg/40 py-4 pl-4 text-paper-100">
+      <p
+        role="alert"
+        className="border-l-2 border-stop bg-stop-bg/40 py-4 pl-4 text-paper-100"
+      >
         {error}
       </p>
     );
   }
   if (!project) {
-    return <p className="slate text-paper-400" role="status">Loading</p>;
+    return (
+      <p className="slate text-paper-400" role="status">
+        Loading
+      </p>
+    );
   }
 
   const master = assets.find((a) => a.role === "master");
+  const extras = SLOTS.filter((s) => !s.required);
 
   return (
     <>
       <ProjectRail project={project} />
 
-      <div className="mb-10">
-        <h2 className="font-display text-2xl text-paper-000">
-          {master ? "Your master, measured" : "Give Preflight the master"}
-        </h2>
-        <p className="mt-3 max-w-measure text-[15px] leading-relaxed text-paper-300">
-          {master
-            ? "Everything below was read from the file itself after upload. Your original is stored unchanged and is never written to."
-            : "Upload the finished film. Preflight will open it, measure what it actually is, and record a hash so you can prove the original was never altered."}
-        </p>
-      </div>
+      {!master && (
+        <div className="mb-10">
+          <h2 className="font-display text-2xl text-paper-000">
+            Upload your finished film
+          </h2>
+          <p className="mt-3 max-w-measure text-[15px] leading-relaxed text-paper-300">
+            Preflight opens the file and measures what it actually is, then
+            records a fingerprint so you can prove your original was never
+            altered. Your film is stored privately and is never changed.
+          </p>
+        </div>
+      )}
 
-      <div className="space-y-4">
-        {SLOTS.map((slot) => (
-          <Slot
-            key={slot.role}
-            projectId={projectId}
-            slot={slot}
-            asset={assets.find((a) => a.role === slot.role)}
-            onDone={refresh}
-          />
-        ))}
-      </div>
+      <Slot
+        projectId={projectId}
+        slot={SLOTS[0]}
+        asset={master}
+        onDone={refresh}
+        prominent
+      />
 
       {master && (
-        <div className="mt-10 flex justify-end">
-          <Link
-            href={`/projects/${projectId}/destinations`}
-            className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium
-                       text-ink-000 transition hover:bg-white"
-          >
-            Choose destinations
-          </Link>
-        </div>
+        <>
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-4">
+            <p className="text-sm text-paper-400">
+              That is everything Preflight needs to start checking.
+            </p>
+            <Link
+              href={`/projects/${projectId}/destinations`}
+              className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium
+                         text-ink-000 transition hover:bg-white"
+            >
+              Continue to destinations
+            </Link>
+          </div>
+
+          {/* Secondary by construction: they only appear once the film is in,
+              and they sit under a quieter heading. Someone who ignores this
+              section entirely still has a working delivery. */}
+          <section className="mt-14 border-t border-line pt-8">
+            <h3 className="text-sm font-medium text-paper-100">
+              Anything else to send with it?
+            </h3>
+            <p className="mt-2 max-w-measure text-sm leading-relaxed text-paper-400">
+              Optional. Add these if you have them and Preflight will check them
+              too — some destinations publish requirements about subtitles and
+              artwork, and it can only check what it has been given.
+            </p>
+            <div className="mt-5 space-y-4">
+              {extras.map((slot) => (
+                <Slot
+                  key={slot.role}
+                  projectId={projectId}
+                  slot={slot}
+                  asset={assets.find((a) => a.role === slot.role)}
+                  onDone={refresh}
+                />
+              ))}
+            </div>
+          </section>
+        </>
       )}
     </>
   );
@@ -140,11 +185,13 @@ function Slot({
   slot,
   asset,
   onDone,
+  prominent = false,
 }: {
   projectId: string;
   slot: SlotSpec;
   asset?: Asset;
   onDone: () => Promise<void>;
+  prominent?: boolean;
 }) {
   const [phase, setPhase] = useState<"idle" | "sending" | "measuring">("idle");
   const [sent, setSent] = useState(0);
@@ -166,9 +213,6 @@ function Slot({
 
       await uploadToSignedUrl(intent.upload_url, file, setSent);
 
-      // The worker opens the file here. On a long master this is the slow
-      // part, and it is honest to say what is happening rather than leave the
-      // progress bar sitting at 100%.
       setPhase("measuring");
       await api.completeUpload(projectId, intent.asset_id);
       await onDone();
@@ -182,22 +226,37 @@ function Slot({
   }
 
   return (
-    <section className="rounded-[3px] border border-line bg-ink-100 p-5">
+    <section
+      className={`rounded-[3px] border bg-ink-100 ${
+        prominent && !asset ? "border-line-strong p-8" : "border-line p-5"
+      }`}
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <div>
-          <h3 className="text-[15px] font-medium text-paper-000">
+          <h3
+            className={`font-medium text-paper-000 ${
+              prominent && !asset ? "text-lg" : "text-[15px]"
+            }`}
+          >
             {slot.title}
             {!slot.required && (
               <span className="ml-2 text-xs font-normal text-paper-400">optional</span>
             )}
           </h3>
-          <p className="mt-1 text-sm text-paper-400">{slot.hint}</p>
+          <p className="mt-1 max-w-measure text-sm leading-relaxed text-paper-400">
+            {slot.hint}
+          </p>
         </div>
 
         {!asset && phase === "idle" && (
-          <label className="cursor-pointer rounded-[3px] border border-line-strong px-4 py-2
-                            text-sm text-paper-100 transition hover:bg-ink-200">
-            Choose file
+          <label
+            className={`cursor-pointer rounded-[3px] text-sm transition ${
+              prominent
+                ? "bg-paper-000 px-5 py-2.5 font-medium text-ink-000 hover:bg-white"
+                : "border border-line-strong px-4 py-2 text-paper-100 hover:bg-ink-200"
+            }`}
+          >
+            {prominent ? "Choose your film" : "Choose file"}
             <input
               type="file"
               accept={slot.accept}
@@ -213,8 +272,8 @@ function Slot({
 
       {slot.role === "subtitle" && !asset && phase === "idle" && (
         <div className="mt-4">
-          <label htmlFor="sub-lang" className="slate block text-paper-400">
-            Language of these subtitles
+          <label htmlFor="sub-lang" className="block text-sm text-paper-300">
+            What language are these subtitles in?
           </label>
           <input
             id="sub-lang"
@@ -224,12 +283,9 @@ function Slot({
             className="mt-2 w-28 rounded-[3px] border border-line bg-ink-000 px-3 py-1.5
                        font-mono text-sm text-paper-000 outline-none focus:border-line-strong"
           />
-          {/* A subtitle file does not record its own language, and taking the
-              film's primary language as the subtitle's would be a measurement
-              nobody made. So it is asked for. */}
-          <p className="mt-1.5 text-xs text-paper-400">
-            Subtitle files do not carry this, so Preflight cannot read it. Some
-            destinations require it.
+          <p className="mt-1.5 max-w-measure text-xs text-paper-400">
+            Subtitle files do not record this, so Preflight cannot read it from
+            the file. Some destinations require it.
           </p>
         </div>
       )}
@@ -243,87 +299,113 @@ function Slot({
             />
           </div>
           <p className="mt-2 text-sm text-paper-300" role="status">
-            Sending to private storage · {Math.round(sent * 100)}%
+            Uploading securely · {Math.round(sent * 100)}%
           </p>
         </div>
       )}
 
       {phase === "measuring" && (
         <div className="mt-4">
-          <Working label="Opening the file and measuring it" />
+          <Working label="Measuring your film" />
         </div>
       )}
 
       {failure && (
-        <p role="alert" className="mt-4 border-l-2 border-stop bg-stop-bg/40 py-2.5 pl-3 text-sm text-paper-100">
+        <p
+          role="alert"
+          className="mt-4 border-l-2 border-stop bg-stop-bg/40 py-2.5 pl-3 text-sm text-paper-100"
+        >
           {failure}
         </p>
       )}
 
-      {asset && <Measured asset={asset} />}
+      {asset && <Measured asset={asset} isMaster={slot.required} />}
     </section>
   );
 }
 
 /**
- * What the worker found.
+ * What the worker found, said briefly.
  *
- * Grouped and labelled rather than dumped as JSON, with the raw evidence
- * available underneath for anyone who wants it. Provenance sits with the
- * values because a measurement without a tool and version behind it is just
- * an assertion.
+ * The summary answers the only question someone has at this moment — did that
+ * work, and is this the right file — in the words they would use about their
+ * own film. Everything measured is still here, one disclosure away, with the
+ * tool and version that produced it.
  */
-function Measured({ asset }: { asset: Asset }) {
-  const properties = asset.measured_properties ?? {};
-  const groups = Object.entries(properties).filter(
-    ([, value]) => value && typeof value === "object",
-  ) as [string, Record<string, unknown>][];
+function Measured({ asset, isMaster }: { asset: Asset; isMaster: boolean }) {
+  const properties = (asset.measured_properties ?? {}) as Record<
+    string,
+    Record<string, unknown>
+  >;
+  const video = properties.video ?? {};
+  const audio = properties.audio ?? {};
 
-  const flat = Object.entries(properties).filter(
-    ([, value]) => !value || typeof value !== "object",
+  const resolution = resolutionName(
+    video.widthPx as number | undefined,
+    video.heightPx as number | undefined,
   );
+  const duration = formatDuration(video.durationSeconds as number | undefined);
+  const frameRate = video.frameRate as number | undefined;
+  const channels = audio.channels as number | undefined;
+
+  const videoLine = [resolution, codecName(video.codec as string), frameRate ? `${frameRate} fps` : null]
+    .filter(Boolean)
+    .join(" · ");
+  const channelLabel =
+    channels === 1 ? "Mono" : channels === 2 ? "Stereo" : channels ? `${channels}-channel` : null;
+  const audioLine = [
+    channelLabel ? `${channelLabel} audio` : null,
+    codecName(audio.codec as string),
+  ]
+    .filter(Boolean)
+    .join(" · ");
 
   return (
     <div className="mt-5 border-t border-line pt-5">
-      <div className="flex flex-wrap items-baseline gap-x-6 gap-y-1">
-        <p className="text-sm text-paper-100">{asset.original_filename}</p>
-        <p className="text-xs text-paper-400">{formatBytes(asset.byte_size)}</p>
-      </div>
-
-      {groups.map(([groupName, values]) => (
-        <div key={groupName} className="mt-4">
-          <h4 className="slate mb-2 text-paper-400">{groupName}</h4>
-          <dl className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
-            {Object.entries(values)
-              .filter(([key]) => !key.startsWith("_"))
-              .map(([key, value]) => (
-                <Row key={key} label={key} value={value} />
-              ))}
-          </dl>
-        </div>
-      ))}
-
-      {flat.length > 0 && (
-        <dl className="mt-4 grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
-          {flat
-            .filter(([key]) => !key.startsWith("_"))
-            .map(([key, value]) => (
-              <Row key={key} label={key} value={value} />
-            ))}
-        </dl>
+      {isMaster && (
+        <p className="text-[15px] text-paper-000">Your film was measured successfully</p>
       )}
 
+      <div className="mt-2 space-y-0.5 text-sm text-paper-300">
+        <p>
+          <span className="text-paper-100">{asset.original_filename}</span>
+          {duration && <span> · {duration}</span>}
+          <span className="text-paper-400"> · {formatBytes(asset.byte_size)}</span>
+        </p>
+        {videoLine && <p>{videoLine}</p>}
+        {audioLine && <p>{audioLine}</p>}
+      </div>
+
       <details className="mt-5">
-        <summary className="cursor-pointer text-xs text-paper-400 hover:text-paper-200">
-          Provenance
+        <summary className="cursor-pointer text-xs text-paper-400 transition hover:text-paper-200">
+          View technical measurements
         </summary>
-        <dl className="mt-3 space-y-1.5 border-l border-line pl-4">
-          <Row label="sha256" value={asset.sha256} mono />
-          <Row label="measured by" value={asset.inspector} />
-          <Row label="tool version" value={asset.inspector_version} mono />
-          <Row label="custody" value={asset.custody_state} />
-          <Row label="original is immutable" value={asset.immutable} />
-        </dl>
+
+        <div className="mt-3 border-l border-line pl-4">
+          {Object.entries(properties)
+            .filter(([, value]) => value && typeof value === "object")
+            .map(([groupName, values]) => (
+              <div key={groupName} className="mb-4">
+                <h4 className="slate mb-2 text-paper-400">{groupName}</h4>
+                <dl className="grid gap-x-8 gap-y-1.5 sm:grid-cols-2">
+                  {Object.entries(values)
+                    .filter(([key]) => !key.startsWith("_"))
+                    .map(([key, value]) => (
+                      <Row key={key} label={key} value={value} />
+                    ))}
+                </dl>
+              </div>
+            ))}
+
+          <h4 className="slate mb-2 text-paper-400">provenance</h4>
+          <dl className="space-y-1.5">
+            <Row label="sha256" value={asset.sha256} mono />
+            <Row label="measured by" value={asset.inspector} />
+            <Row label="tool version" value={asset.inspector_version} mono />
+            <Row label="custody" value={asset.custody_state} />
+            <Row label="original is immutable" value={asset.immutable} />
+          </dl>
+        </div>
       </details>
     </div>
   );

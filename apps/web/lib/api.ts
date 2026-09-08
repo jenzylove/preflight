@@ -10,6 +10,7 @@
 
 import { getIdToken } from "./auth";
 import type {
+  DestinationResearch,
   Asset,
   Destination,
   DeliveryRoom,
@@ -131,6 +132,22 @@ export const api = {
     }),
 
   listDestinations: () => call<Destination[]>("/v1/destinations"),
+
+  /**
+   * Ask what a destination currently publishes.
+   *
+   * Returns straight away with something to watch. The search, the reading and
+   * the extraction happen on the server and take minutes, so the browser polls
+   * rather than waiting on one long request that a flaky connection would drop.
+   */
+  researchDestination: (query: string) =>
+    call<DestinationResearch>("/v1/destinations/research", {
+      method: "POST",
+      body: JSON.stringify({ query }),
+    }),
+
+  readResearch: (jobId: string) =>
+    call<DestinationResearch>(`/v1/destinations/research/${jobId}`),
 
   /** Every requirement this project will be measured against, with evidence. */
   listRules: (projectId: string) =>

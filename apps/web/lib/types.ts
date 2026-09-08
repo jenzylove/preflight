@@ -244,3 +244,31 @@ export interface UploadIntent {
   upload_url: string;
   expires_in_seconds: number;
 }
+
+/**
+ * One attempt to find out what a destination requires.
+ *
+ * Researching takes minutes, so the browser watches this rather than holding a
+ * request open. NOTHING_FOUND is a real, expected answer: a destination whose
+ * specification is not published where Preflight can verify it is reported as
+ * such, never filled in with plausible defaults.
+ */
+export interface DestinationResearch {
+  id: string;
+  query: string;
+  state:
+    | "QUEUED"
+    | "SEARCHING"
+    | "READING"
+    | "EXTRACTING"
+    | "READY"
+    | "NOTHING_FOUND"
+    | "FAILED";
+  progress: string | null;
+  official_sources: number;
+  rejected_sources: number;
+  total_rules: number;
+  mandatory_rules: number;
+  failure_reason: string | null;
+  destination: Destination | null;
+}

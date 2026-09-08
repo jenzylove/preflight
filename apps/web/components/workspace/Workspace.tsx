@@ -87,9 +87,12 @@ function TopBar({ user }: { user: User }) {
   return (
     <header className="sticky top-0 z-40 border-b border-line bg-ink-000/85 backdrop-blur-md">
       <div className="mx-auto flex max-w-6xl items-center gap-6 px-6 py-3.5">
+        {/* A wordmark goes to the front door. Sending it to /projects meant
+            there was no way back to the public site once signed in. */}
         <Link
-          href="/projects"
-          className="font-display text-lg leading-none text-paper-000"
+          href="/"
+          className="font-display text-lg leading-none text-paper-000
+                     transition hover:text-white"
         >
           Preflight
         </Link>
@@ -104,8 +107,8 @@ function TopBar({ user }: { user: User }) {
                 aria-current={active ? "page" : undefined}
                 className={`rounded-[3px] px-3 py-1.5 text-sm transition ${
                   active
-                    ? "text-paper-000"
-                    : "text-paper-300 hover:text-paper-100"
+                    ? "bg-ink-200 font-medium text-paper-000"
+                    : "text-paper-300 hover:bg-ink-150 hover:text-paper-100"
                 }`}
               >
                 {item.label}
@@ -129,12 +132,27 @@ function TopBar({ user }: { user: User }) {
               onClick={() => setMenuOpen((open) => !open)}
               aria-expanded={menuOpen}
               aria-haspopup="menu"
-              className="flex h-8 w-8 items-center justify-center rounded-full bg-ink-200
-                         text-xs font-medium text-paper-200 ring-1 ring-inset ring-line
-                         transition hover:text-paper-000"
+              className="flex items-center gap-1.5 rounded-full py-1 pl-1 pr-2
+                         text-paper-300 transition hover:text-paper-000"
             >
-              <span className="sr-only">Account</span>
-              <span aria-hidden="true">{initial(user)}</span>
+              <span className="sr-only">Your account</span>
+              <span
+                aria-hidden="true"
+                className="flex h-7 w-7 items-center justify-center rounded-full
+                           bg-ink-200 text-xs font-medium text-paper-100
+                           ring-1 ring-inset ring-line"
+              >
+                {initial(user)}
+              </span>
+              {/* A chevron is the difference between an avatar and a menu. */}
+              <svg
+                aria-hidden="true"
+                viewBox="0 0 12 12"
+                className={`h-3 w-3 transition ${menuOpen ? "rotate-180" : ""}`}
+              >
+                <path d="M2.5 4.5L6 8l3.5-3.5" fill="none" stroke="currentColor"
+                      strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
             </button>
 
             {menuOpen && (
@@ -152,8 +170,8 @@ function TopBar({ user }: { user: User }) {
                              border border-line bg-ink-100 shadow-2xl"
                 >
                   <div className="border-b border-line px-4 py-3">
-                    <p className="truncate text-sm text-paper-100">{user.email}</p>
-                    <p className="mt-0.5 text-xs text-paper-400">Signed in</p>
+                    <p className="text-xs text-paper-400">Signed in as</p>
+                    <p className="mt-0.5 truncate text-sm text-paper-100">{user.email}</p>
                   </div>
                   <button
                     type="button"
@@ -185,7 +203,7 @@ function TopBar({ user }: { user: User }) {
               href={item.href}
               aria-current={active ? "page" : undefined}
               className={`rounded-[3px] px-3 py-1.5 text-sm ${
-                active ? "text-paper-000" : "text-paper-300"
+                active ? "bg-ink-200 font-medium text-paper-000" : "text-paper-300"
               }`}
             >
               {item.label}

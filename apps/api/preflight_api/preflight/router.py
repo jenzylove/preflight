@@ -158,10 +158,23 @@ def _measured_properties(project_id: uuid.UUID, session: Session) -> dict[AssetT
 
     project = session.get(Project, project_id)
     if project is not None:
+        # Runtime is measurable, so it is not something to make someone type
+        # before they have uploaded anything. If they stated one it wins - a
+        # declared runtime can legitimately differ from the file, and the
+        # declaration is what a festival is told - but otherwise the film
+        # itself answers the question.
+        runtime_seconds = project.runtime_seconds
+        if runtime_seconds is None:
+            measured_duration = (measured.get(AssetType.VIDEO) or {}).get(
+                "durationSeconds"
+            )
+            if measured_duration is not None:
+                runtime_seconds = round(float(measured_duration))
+
         metadata = {
             "title": project.title or None,
             "language": project.primary_language or None,
-            "runtimeSeconds": project.runtime_seconds,
+            "runtimeSeconds": runtime_seconds,
             "countryOfOrigin": project.country_of_origin or None,
             "synopsisChars": len(project.synopsis) if project.synopsis else None,
         }

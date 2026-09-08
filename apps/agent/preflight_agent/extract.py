@@ -241,7 +241,15 @@ def extract_rules(
     Sources are processed individually so a rule is always attributable to
     exactly one piece of evidence. Batching them would produce rules whose
     provenance is a guess.
+
+    The model calls are issued concurrently, because they are independent and
+    slow: a specification PDF can take minutes on its own, and someone waiting
+    for a destination to be researched is watching that time pass. The answers
+    are then consumed strictly in source order, so rule identifiers and the
+    pack digest never depend on which call happened to finish first.
     """
+    from concurrent.futures import ThreadPoolExecutor
+
     from google.genai import types
 
     rules: list[Rule] = []
@@ -250,25 +258,14 @@ def extract_rules(
     injections: list[dict[str, str]] = []
     counter = 0
 
-    for source in sources:
-        found = looks_like_injection(source.text)
-        if found:
-            # Recorded, not silently dropped. A destination page containing
-            # instruction-shaped text is something the user should be told about.
-            injections.append({
-                "url": source.url,
-                "patterns": "; ".join(found[:5]),
-                "tier": source.trust_tier,
-            })
-            logger.warning("instruction-shaped text in source %s", source.url)
-
+    def _ask(source: RetrievedSource):
+        """One model call. Returns the parsed payload, or the failure."""
         prompt = (
             f"Destination: {destination_name}\n\n"
             f"Extract the technical delivery requirements stated in the source "
             f"below. Emit only requirements the source states explicitly.\n\n"
             f"{wrap_untrusted(source)}"
         )
-
         try:
             response = client.models.generate_content(
                 model=model,
@@ -280,10 +277,32 @@ def extract_rules(
                     temperature=0.0,
                 ),
             )
-            payload = json.loads(response.text)
-        except Exception as exc:  # noqa: BLE001 — provider raises a wide family
+            return json.loads(response.text), None
+        except Exception as exc:  # noqa: BLE001 - provider raises a wide family
             logger.warning("extraction failed for %s: %s", source.url, exc)
-            rejected.append({"url": source.url, "reason": f"extraction failed: {exc}"[:200]})
+            return None, exc
+
+    # Bounded: enough to overlap the calls that matter, without opening one
+    # connection per source on a destination that publishes a dozen pages.
+    with ThreadPoolExecutor(max_workers=min(6, max(1, len(sources)))) as pool:
+        answers = list(pool.map(_ask, sources))
+
+    for source, (payload, failure) in zip(sources, answers, strict=True):
+        found = looks_like_injection(source.text)
+        if found:
+            # Recorded, not silently dropped. A destination page containing
+            # instruction-shaped text is something the user should be told about.
+            injections.append({
+                "url": source.url,
+                "patterns": "; ".join(found[:5]),
+                "tier": source.trust_tier,
+            })
+            logger.warning("instruction-shaped text in source %s", source.url)
+
+        if payload is None:
+            rejected.append(
+                {"url": source.url, "reason": f"extraction failed: {failure}"[:200]}
+            )
             continue
 
         for proposed in payload.get("rules", []):

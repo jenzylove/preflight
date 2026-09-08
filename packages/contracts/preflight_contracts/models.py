@@ -558,3 +558,59 @@ class RuleDisposition(Base):
         CheckConstraint("length(trim(reason)) > 0", name="ck_disposition_has_reason"),
         UniqueConstraint("project_id", "rule_id", name="uq_disposition_per_rule"),
     )
+
+
+class DestinationResearch(Base):
+    """One attempt to find out what a destination actually requires.
+
+    Researching a destination means asking Parallel for its published
+    documentation, classifying what comes back by whether the destination
+    itself published it, and giving only the trusted material to the model for
+    extraction. That takes minutes, so it cannot happen inside the request that
+    starts it, and it cannot live in memory either: the person who asked is
+    entitled to close the tab and come back.
+
+    The row is the whole story of the attempt - what was asked for, what was
+    found, what was rejected and why - so a destination that turns out to have
+    no retrievable specification says so with evidence rather than silently
+    producing nothing.
+    """
+
+    __tablename__ = "destination_research"
+
+    id: Mapped[uuid.UUID] = _pk()
+    requested_by: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    query: Mapped[str] = mapped_column(String(200), nullable=False)
+
+    #: QUEUED -> SEARCHING -> READING -> EXTRACTING -> (READY | NOTHING_FOUND | FAILED)
+    state: Mapped[str] = mapped_column(String(20), nullable=False, default="QUEUED")
+    #: One sentence, in the words shown to the person waiting.
+    progress: Mapped[str | None] = mapped_column(String(200))
+
+    destination_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("destinations.id", ondelete="CASCADE"), nullable=True
+    )
+    rule_pack_id: Mapped[uuid.UUID | None] = mapped_column(
+        ForeignKey("rule_packs.id", ondelete="SET NULL"), nullable=True
+    )
+
+    official_sources: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    rejected_sources: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    total_rules: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    mandatory_rules: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+
+    #: Why this produced nothing, in a form a person can act on.
+    failure_reason: Mapped[str | None] = mapped_column(Text)
+
+    created_at: Mapped[datetime] = _created()
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    __table_args__ = (
+        CheckConstraint(
+            "state IN ('QUEUED','SEARCHING','READING','EXTRACTING','READY',"
+            "'NOTHING_FOUND','FAILED')",
+            name="ck_research_state",
+        ),
+    )
