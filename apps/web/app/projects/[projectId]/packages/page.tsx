@@ -7,7 +7,18 @@ import { StatusChip } from "@/components/Status";
 import { ProjectRail } from "@/components/workspace/Rail";
 import { Workspace } from "@/components/workspace/Workspace";
 import { api } from "@/lib/api";
-import type { DeliveryRoom, PackageSummary, Project } from "@/lib/types";
+import {
+  fieldLabel,
+  formatValue,
+  operationDone,
+  requirementSentence,
+} from "@/lib/language";
+import type {
+  DeliveryRoom,
+  OutstandingCheck,
+  PackageSummary,
+  Project,
+} from "@/lib/types";
 
 /**
  * What was produced, and whether it survived being checked again.
@@ -125,6 +136,94 @@ function Packages({ projectId }: { projectId: string }) {
   );
 }
 
+/**
+ * One class of unfinished business, in sentences.
+ *
+ * Each entry says what the destination asks for and what the film currently
+ * is. The field path, the comparison result and the exact published value are
+ * still available, one disclosure deeper, because they are the evidence.
+ */
+function OutstandingGroup({
+  title,
+  blurb,
+  checks,
+  destination,
+}: {
+  title: string;
+  blurb: string;
+  checks: OutstandingCheck[];
+  destination: string;
+}) {
+  if (checks.length === 0) return null;
+
+  return (
+    <div className="mb-6">
+      <h4 className="text-sm font-medium text-paper-100">
+        {title}
+        <span className="ml-2 font-normal text-paper-400">{checks.length}</span>
+      </h4>
+      <p className="mt-1 max-w-measure text-sm leading-relaxed text-paper-400">
+        {blurb}
+      </p>
+      <ul className="mt-3 space-y-2.5">
+        {checks.map((check, index) => (
+          <li key={`${check.asset_type}.${check.field}-${index}`}
+              className="rounded-[3px] bg-ink-000/40 px-4 py-3">
+            <p className="text-sm font-medium text-paper-000">
+              {fieldLabel(check.asset_type, check.field)}
+            </p>
+            <p className="mt-1 max-w-measure text-sm leading-relaxed text-paper-200">
+              {requirementSentence(
+                destination,
+                check.asset_type,
+                check.field,
+                "eq",
+                check.published,
+              )}{" "}
+              {check.measured ? (
+                <span className="text-paper-300">
+                  Your film is {formatValue(check.measured, check.field)}.
+                </span>
+              ) : (
+                <span className="text-paper-400">
+                  Preflight has not measured this on your files.
+                </span>
+              )}
+            </p>
+            <details className="mt-2">
+              <summary className="cursor-pointer text-xs text-paper-400 transition hover:text-paper-200">
+                Technical details
+              </summary>
+              <dl className="mt-2 grid gap-x-8 gap-y-1 border-l border-line pl-3 text-xs sm:grid-cols-2">
+                <div>
+                  <dt className="inline text-paper-400">Field: </dt>
+                  <dd className="inline font-mono text-paper-200">
+                    {check.asset_type}.{check.field}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="inline text-paper-400">Result: </dt>
+                  <dd className="inline font-mono text-paper-200">{check.result}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-paper-400">Published: </dt>
+                  <dd className="inline font-mono text-paper-200">{check.published}</dd>
+                </div>
+                <div>
+                  <dt className="inline text-paper-400">Measured: </dt>
+                  <dd className="inline font-mono text-paper-200">
+                    {check.measured ?? "not measured"}
+                  </dd>
+                </div>
+              </dl>
+            </details>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function PackageCard({
   pkg,
   projectId,
@@ -136,48 +235,84 @@ function PackageCard({
   rooms: DeliveryRoom[];
   onChanged: () => Promise<void>;
 }) {
+  const destinationName = pkg.destination_name || pkg.destination_id;
+
+  // Grouped by what the person has to do, which is the only ordering that
+  // helps. The raw result enums stay under technical details.
+  const decisions = pkg.outstanding.filter((c) => c.result === "REVIEW_REQUIRED");
+  const missing = pkg.outstanding.filter(
+    (c) => c.result === "NOT_MEASURED" || c.result === "AMBIGUOUS",
+  );
+  const external = pkg.outstanding.filter((c) => c.result === "UNSUPPORTED");
+  const fixed = pkg.transformations;
+
   return (
     <section className="rounded-[3px] border border-line bg-ink-100">
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-line px-5 py-4">
-        <div>
-          <h3 className="font-display text-lg text-paper-000">
-            {pkg.destination_name || pkg.destination_id}
-          </h3>
-          <p className="mt-1 text-sm text-paper-300">
-            {pkg.requirements_satisfied} requirements satisfied
-          </p>
-        </div>
-        {pkg.verified ? (
-          <StatusChip tone="ok">Ready against current published requirements</StatusChip>
-        ) : (
-          <StatusChip tone="act">Not ready</StatusChip>
+      {/* The verdict first, in a sentence about the film. This screen used to
+          open with a destination slug and a fraction, then list
+          "subtitle.cueCount (NOT_MEASURED)" as the outcome of somebody's
+          delivery. */}
+      <header className="border-b border-line px-6 py-5">
+        <h3 className="font-display text-xl leading-snug text-paper-000">
+          {pkg.verified
+            ? `Your ${destinationName} package is ready`
+            : `Your ${destinationName} package is not ready yet`}
+        </h3>
+        <p className="mt-2 text-sm text-paper-300">
+          {pkg.checks_total > 0
+            ? `${pkg.checks_passed} of ${pkg.checks_total} required checks pass`
+            : pkg.requirements_satisfied}
+          {fixed.length > 0 && (
+            <>
+              {" · "}
+              Preflight safely fixed {fixed.length}{" "}
+              {fixed.length === 1 ? "issue" : "issues"}
+            </>
+          )}
+        </p>
+
+        {!pkg.verified && decisions.length > 0 && (
+          <Link
+            href={`/projects/${projectId}/preflight`}
+            className="mt-4 inline-block rounded-[3px] bg-paper-000 px-4 py-2 text-sm
+                       font-medium text-ink-000 transition hover:bg-white"
+          >
+            Resolve remaining issues
+          </Link>
         )}
       </header>
 
       <div className="px-5 py-5">
-        {!pkg.verified && pkg.limitations.length > 0 && (
-          <div className="mb-5 rounded-[3px] border-l-2 border-review bg-review-bg/20 py-3 pl-4 pr-4">
-            <p className="text-sm text-paper-100">What is still outstanding</p>
-            <ul className="mt-2 space-y-1.5">
-              {pkg.limitations.map((limitation, index) => (
-                <li key={index} className="text-sm leading-relaxed text-paper-300">
-                  {limitation}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+        <OutstandingGroup
+          title="Needs your decision"
+          blurb="Changes to the film itself. Preflight will not make these for you."
+          checks={decisions}
+          destination={destinationName}
+        />
+        <OutstandingGroup
+          title="Needs information or files from you"
+          blurb="Preflight could not check these because it was not given what it needs."
+          checks={missing}
+          destination={destinationName}
+        />
+        <OutstandingGroup
+          title="Must be handled outside Preflight"
+          blurb="No safe operation exists for these, so they need work elsewhere."
+          checks={external}
+          destination={destinationName}
+        />
 
-        {pkg.transformations.length > 0 && (
+        {fixed.length > 0 && (
           <div className="mb-5">
-            <h4 className="slate mb-2 text-paper-400">What changed</h4>
-            <ul className="space-y-2">
-              {pkg.transformations.map((t, index) => (
-                <li key={index} className="text-sm">
-                  <span className="font-mono text-paper-100">{t.operation}</span>
+            <h4 className="text-sm font-medium text-paper-100">Already fixed</h4>
+            <ul className="mt-2 space-y-1.5">
+              {fixed.map((t, index) => (
+                <li key={index} className="text-sm text-paper-300">
+                  {operationDone(t.operation)}
                   {t.picture_preserved === true && (
-                    <span className="ml-3 text-paper-300">
-                      picture bit-identical to your original
+                    <span className="text-paper-400">
+                      {" "}
+                      — your picture is bit-identical to the original
                     </span>
                   )}
                 </li>

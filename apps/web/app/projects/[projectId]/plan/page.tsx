@@ -7,6 +7,7 @@ import { SAFETY, SafetyChip, StatusChip, Working } from "@/components/Status";
 import { ProjectRail } from "@/components/workspace/Rail";
 import { Workspace } from "@/components/workspace/Workspace";
 import { api } from "@/lib/api";
+import { operationLabel } from "@/lib/language";
 import type { JobStatus, PlanStep, PreflightRun, Project } from "@/lib/types";
 
 /**
@@ -245,7 +246,11 @@ function StepCard({ step }: { step: PlanStep }) {
   return (
     <div className="rounded-[3px] border border-line bg-ink-100 p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
-        <h4 className="font-mono text-sm text-paper-000">{step.operation}</h4>
+        {/* The identifier is ours. The person approving this needs to know
+            what will happen to their film, not what the function is called. */}
+        <h4 className="text-[15px] font-medium text-paper-000">
+          {operationLabel(step.operation)}
+        </h4>
         <SafetyChip safety={step.safety} />
       </div>
 
@@ -254,6 +259,7 @@ function StepCard({ step }: { step: PlanStep }) {
       </p>
 
       <dl className="mt-4 grid gap-x-8 gap-y-1.5 text-xs sm:grid-cols-2">
+        <Detail label="Operation" value={step.operation} />
         {step.input_asset && (
           <Detail label="Reads" value={step.input_asset} />
         )}
@@ -385,7 +391,7 @@ function Processing({
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <h3 className="font-display text-lg text-paper-000">
           {finished
-            ? "Repairs finished"
+            ? "Safe fixes completed"
             : failed
               ? "Processing stopped"
               : "Working on your files"}
@@ -401,11 +407,11 @@ function Processing({
 
       {!finished && !failed && (
         <div className="mt-5">
-          <Working label="Running the approved operations" />
+          <Working label="Applying the safe fixes to a copy of your film" />
           <ul className="mt-4 space-y-1.5">
             {steps.map((step) => (
-              <li key={step.step_id} className="font-mono text-xs text-paper-400">
-                {step.operation}
+              <li key={step.step_id} className="text-sm text-paper-300">
+                {operationLabel(step.operation)}
               </li>
             ))}
           </ul>
@@ -414,10 +420,15 @@ function Processing({
 
       {finished && (
         <>
+          {/* "Finished" is a fact about a process, not about a delivery. Both
+              were reported as one, so running two safe fixes on a film that
+              still fails six requirements read as success. */}
           <p className="mt-5 max-w-measure text-sm leading-relaxed text-paper-200">
-            The worker reported success, which on its own proves only that a
-            process ended. Preflight has re-opened the files it produced and
-            measured them again from scratch.
+            The fixes Preflight was allowed to make have been applied to a copy
+            of your film. That does not yet mean your film is ready: Preflight
+            has re-opened the files it produced and measured them again from
+            scratch, and the next screen says where that leaves each
+            destination.
           </p>
           <Link
             href={`/projects/${projectId}/packages`}

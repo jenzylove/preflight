@@ -158,7 +158,7 @@ function NewProject() {
                                px-3.5 py-2.5 text-[15px] text-paper-000 outline-none
                                focus:border-line-strong"
                   >
-                    <option value="">Not saying yet</option>
+                    <option value="">Select language (optional)</option>
                     {LANGUAGES.map((option) => (
                       <option key={option.code} value={option.code}>
                         {option.name}
@@ -182,7 +182,7 @@ function NewProject() {
                                px-3.5 py-2.5 text-[15px] text-paper-000 outline-none
                                focus:border-line-strong"
                   >
-                    <option value="">Not saying yet</option>
+                    <option value="">Select country (optional)</option>
                     {COUNTRIES.map((option) => (
                       <option key={option.code} value={option.code}>
                         {option.name}

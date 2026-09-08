@@ -7,7 +7,13 @@ import { StatusChip, Working } from "@/components/Status";
 import { ProjectRail } from "@/components/workspace/Rail";
 import { Workspace } from "@/components/workspace/Workspace";
 import { api } from "@/lib/api";
-import { fieldLabel, formatValue, requirementSentence } from "@/lib/language";
+import {
+  COME_BACK,
+  fieldLabel,
+  formatValue,
+  requirementSentence,
+  whatYouCanDo,
+} from "@/lib/language";
 import type {
   Assertion,
   Conflict,
@@ -301,22 +307,38 @@ function Matrix({
             </>
           )}
         </p>
+
+        {/* A count is not an action. Somebody reading "Needs your decision - 6"
+            had no way to tell where those six decisions were or what making one
+            involved. */}
+        {needsDecision.length > 0 && (
+          <a
+            href={`#decisions-${matrix.destination_id}`}
+            className="mt-4 inline-block rounded-[3px] bg-paper-000 px-4 py-2 text-sm
+                       font-medium text-ink-000 transition hover:bg-white"
+          >
+            Resolve {needsDecision.length}{" "}
+            {needsDecision.length === 1 ? "decision" : "decisions"}
+          </a>
+        )}
       </header>
 
       <div className="divide-y divide-line">
         <Group
+          id={`decisions-${matrix.destination_id}`}
           title="Needs your decision"
-          blurb="Fixing these would change the picture, the timing or the meaning of your film, so Preflight will not do it on its own."
+          blurb="Each of these is a change to the film itself. Preflight will not make them for you, so here is what each one is and what you can do about it."
           tone="decide"
           assertions={needsDecision}
           rules={rules}
           projectId={projectId}
           destination={name}
           onChanged={onChanged}
+          decision
         />
         <Group
           title="Preflight can fix these safely"
-          blurb="Deterministic changes that never touch your picture. Your original is not modified."
+          blurb="Preflight can make these itself. Your original file is never modified - every fix is written to a new copy."
           tone="fix"
           assertions={canFix}
           rules={rules}
@@ -380,6 +402,7 @@ function Matrix({
 }
 
 function Group({
+  id,
   title,
   blurb,
   tone,
@@ -388,7 +411,9 @@ function Group({
   projectId,
   destination,
   onChanged,
+  decision = false,
 }: {
+  id?: string;
   title: string;
   blurb: string;
   tone: "decide" | "fix" | "info";
@@ -397,6 +422,7 @@ function Group({
   projectId: string;
   destination: string;
   onChanged: () => Promise<void>;
+  decision?: boolean;
 }) {
   if (assertions.length === 0) return null;
 
@@ -408,7 +434,7 @@ function Group({
         : "border-line-strong";
 
   return (
-    <div className="px-6 py-5">
+    <div id={id} className="scroll-mt-24 px-6 py-5">
       <div className={`border-l-2 pl-4 ${border}`}>
         <h4 className="text-[15px] font-medium text-paper-000">
           {title}
@@ -430,6 +456,7 @@ function Group({
             projectId={projectId}
             destination={destination}
             onChanged={onChanged}
+            decision={decision}
           />
         ))}
       </ul>
@@ -452,12 +479,14 @@ function Finding({
   projectId,
   destination,
   onChanged,
+  decision = false,
 }: {
   assertion: Assertion;
   rule?: Rule;
   projectId: string;
   destination: string;
   onChanged: () => Promise<void>;
+  decision?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const setAside = rule?.disposition === "set_aside";
@@ -492,22 +521,58 @@ function Finding({
         )}
       </p>
 
-      {assertion.result === "REVIEW_REQUIRED" && (
-        <p className="mt-1.5 text-sm text-paper-400">
-          Changing this would re-encode the picture, so Preflight will not do it
-          automatically.
-        </p>
+      {/* The explanation now comes from the comparison itself, which knows
+          which property is at stake. It used to be one hardcoded sentence
+          about re-encoding the picture, printed against audio channels. */}
+      {!decision && assertion.explanation && (
+        <p className="mt-1.5 text-sm text-paper-400">{assertion.explanation}</p>
       )}
-      {assertion.result === "UNSUPPORTED" && (
-        <p className="mt-1.5 text-sm text-paper-400">
-          Preflight has no safe operation for this. It needs judgement or
-          authority it does not have.
-        </p>
-      )}
-      {assertion.result === "REPAIRABLE" && (
-        <p className="mt-1.5 text-sm text-paper-400">
-          Preflight can correct this without re-encoding the picture.
-        </p>
+
+      {decision && (
+        <div className="mt-4 space-y-4 border-l border-line pl-4">
+          <div>
+            <h5 className="text-xs uppercase tracking-wide text-paper-500">
+              Why Preflight will not do this for you
+            </h5>
+            <p className="mt-1 max-w-measure text-sm leading-relaxed text-paper-300">
+              {assertion.explanation}
+            </p>
+          </div>
+
+          <div>
+            <h5 className="text-xs uppercase tracking-wide text-paper-500">
+              What you can do
+            </h5>
+            <p className="mt-1 max-w-measure text-sm leading-relaxed text-paper-200">
+              {whatYouCanDo(assertion.asset_type, assertion.field)}
+            </p>
+            <p className="mt-2 max-w-measure text-sm leading-relaxed text-paper-400">
+              {COME_BACK}
+            </p>
+            <Link
+              href={`/projects/${projectId}/master`}
+              className="mt-3 inline-block rounded-[3px] border border-line-strong
+                         px-4 py-2 text-sm text-paper-100 transition hover:bg-ink-200"
+            >
+              Upload a new version
+            </Link>
+          </div>
+
+          {/* Deliberately separated. Deciding how the film should change and
+              deciding whether we read the requirement correctly are different
+              judgements, and merging them into one control invites somebody to
+              dismiss a real requirement because it is inconvenient. */}
+          <div className="border-t border-line pt-3">
+            <h5 className="text-xs uppercase tracking-wide text-paper-500">
+              Or: does this requirement look wrong?
+            </h5>
+            <p className="mt-1 max-w-measure text-sm leading-relaxed text-paper-400">
+              Preflight read this from {destination}&rsquo;s own page. If it has
+              been misread, check the source and set it aside with a reason -
+              that reason is printed on your delivery proof.
+            </p>
+          </div>
+        </div>
       )}
 
       <div className="mt-3 flex flex-wrap items-center gap-4">

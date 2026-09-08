@@ -206,6 +206,10 @@ export interface PackageSummary {
   files: PackageFile[];
   transformations: Transformation[];
   limitations: string[];
+  /** Unsatisfied required checks, structured so they can be grouped and said in words. */
+  outstanding: OutstandingCheck[];
+  checks_passed: number;
+  checks_total: number;
   validator_version: string | null;
   created_at: string;
 }
@@ -271,4 +275,13 @@ export interface DestinationResearch {
   mandatory_rules: number;
   failure_reason: string | null;
   destination: Destination | null;
+}
+
+export interface OutstandingCheck {
+  asset_type: string;
+  field: string;
+  published: string;
+  measured: string | null;
+  result: string;
+  severity: string;
 }

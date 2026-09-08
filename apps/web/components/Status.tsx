@@ -106,30 +106,30 @@ export const STAGE: Record<
   ProjectStage,
   { label: string; tone: Tone; next: string }
 > = {
-  DRAFT: { label: "No master yet", tone: "idle", next: "Upload your master" },
+  DRAFT: { label: "No film yet", tone: "idle", next: "Upload your film" },
   ASSETS_UPLOADED: {
-    label: "Master measured",
+    label: "Film measured",
     tone: "think",
-    next: "Choose destinations",
+    next: "Choose where it is going",
   },
   DESTINATIONS_CONFIRMED: {
-    label: "Requirements retrieved",
+    label: "Requirements found",
     tone: "think",
-    next: "Run preflight",
+    next: "Check your film against them",
   },
   PREFLIGHT_COMPLETE: {
-    label: "Action required",
+    label: "Needs you",
     tone: "act",
-    next: "Review the repair plan",
+    next: "Review what Preflight can fix",
   },
   REPAIR_APPROVED: {
     label: "Approved",
     tone: "think",
-    next: "Run the repairs",
+    next: "Run the safe fixes",
   },
-  PROCESSING: { label: "Processing", tone: "think", next: "Working" },
-  PACKAGES_READY: { label: "Verified", tone: "ok", next: "Create a delivery room" },
-  DELIVERED: { label: "Delivered", tone: "ok", next: "View the passport" },
+  PROCESSING: { label: "Working", tone: "think", next: "Applying the safe fixes" },
+  PACKAGES_READY: { label: "Ready", tone: "ok", next: "Share your package" },
+  DELIVERED: { label: "Delivered", tone: "ok", next: "View the proof of delivery" },
   DELETION_PENDING: { label: "Deleting", tone: "idle", next: "Removing files" },
   DELETED: { label: "Deleted", tone: "idle", next: "" },
 };

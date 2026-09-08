@@ -47,21 +47,80 @@ GREEN_REPAIRABLE: dict[tuple[AssetType, str], str] = {
     (AssetType.PACKAGE, "checksumAlgorithm"): "build_manifest",
 }
 
-#: Failures that require re-encoding the picture. Real, but not green: they can
-#: change quality, so Preflight reports them and refuses to do them silently.
-YELLOW_FIELDS: set[tuple[AssetType, str]] = {
-    (AssetType.VIDEO, "bitrateBps"),
-    (AssetType.VIDEO, "widthPx"),
-    (AssetType.VIDEO, "heightPx"),
-    (AssetType.VIDEO, "codec"),
-    (AssetType.VIDEO, "profile"),
-    (AssetType.VIDEO, "frameRate"),
-    (AssetType.VIDEO, "container"),
-    (AssetType.AUDIO, "codec"),
-    (AssetType.AUDIO, "sampleRateHz"),
-    (AssetType.AUDIO, "bitrateBps"),
-    (AssetType.AUDIO, "channels"),
+#: Failures Preflight will not correct on its own, and why - in terms of the
+#: thing actually being changed.
+#:
+#: These carried a single shared sentence about re-encoding the picture, which
+#: was read out for audio channels, sample rate and codec too. Telling somebody
+#: that changing their channel count would re-encode the picture is not a
+#: simplification, it is wrong, and it teaches them to distrust every other
+#: explanation on the page. Each field now says what would actually happen to
+#: it.
+YELLOW_REASONS: dict[tuple[AssetType, str], str] = {
+    (AssetType.VIDEO, "bitrateBps"):
+        "Reaching this bitrate means re-encoding the picture, which can change "
+        "how it looks.",
+    (AssetType.VIDEO, "widthPx"):
+        "Changing the picture size means rescaling every frame.",
+    (AssetType.VIDEO, "heightPx"):
+        "Changing the picture size means rescaling every frame.",
+    (AssetType.VIDEO, "codec"):
+        "Changing the video format means re-encoding the picture, which can "
+        "change how it looks.",
+    (AssetType.VIDEO, "profile"):
+        "Changing the encoding profile means re-encoding the picture.",
+    (AssetType.VIDEO, "frameRate"):
+        "Changing the frame rate alters the timing and the motion of the film.",
+    (AssetType.VIDEO, "container"):
+        "Changing the file type means rebuilding the file around the picture "
+        "and sound.",
+    (AssetType.AUDIO, "codec"):
+        "Changing the audio format means re-encoding the soundtrack, which can "
+        "change how it sounds.",
+    (AssetType.AUDIO, "sampleRateHz"):
+        "Changing the sample rate means resampling the soundtrack.",
+    (AssetType.AUDIO, "bitrateBps"):
+        "Reaching this audio bitrate means re-encoding the soundtrack.",
+    (AssetType.AUDIO, "channels"):
+        "Changing the channel count is a new mix, not a conversion. Folding "
+        "5.1 down to stereo, or building 5.1 from stereo, is a decision about "
+        "how the film should sound.",
 }
+
+#: Kept as a set for the callers that only ask whether a field is in this class.
+YELLOW_FIELDS: set[tuple[AssetType, str]] = set(YELLOW_REASONS)
+
+#: What each safe repair actually does, said once, in the words shown to the
+#: person reading the result. The old text promised every one of these left the
+#: picture un-re-encoded, including the ones that never touch the picture at
+#: all - reassurance about the wrong thing is not reassurance.
+GREEN_REASONS: dict[str, str] = {
+    "normalise_loudness":
+        "Preflight can correct this by adjusting the overall level. The mix is "
+        "moved, not reshaped, and the picture is copied untouched.",
+    "rewrite_container_metadata":
+        "Preflight can correct this by rewriting how the file labels itself. "
+        "The picture is copied, not re-encoded.",
+    "convert_subtitles":
+        "Preflight can convert the subtitle file. Timings and text are carried "
+        "across unchanged.",
+    "resize_poster":
+        "Preflight can rescale the artwork to fit. Nothing is cropped.",
+    "normalise_metadata":
+        "Preflight can reformat this to the destination's template.",
+    "rename_and_layout":
+        "Preflight can apply the naming and folder structure this destination "
+        "asks for.",
+    "build_manifest":
+        "Preflight can generate the checksums this destination asks for.",
+}
+
+
+def _green_reason(key: tuple[AssetType, str], operation: str) -> str:
+    known = GREEN_REASONS.get(operation)
+    if known:
+        return known
+    return "Preflight can correct this without changing the film itself."
 
 
 @dataclass(frozen=True)
@@ -193,14 +252,10 @@ def evaluate(
 
     if key in GREEN_REPAIRABLE:
         op = GREEN_REPAIRABLE[key]
-        return build(Result.REPAIRABLE, op, f"Correctable without re-encoding the picture ({op}).")
+        return build(Result.REPAIRABLE, op, _green_reason(key, op))
 
-    if key in YELLOW_FIELDS:
-        return build(
-            Result.REVIEW_REQUIRED,
-            why="Correcting this re-encodes the picture and can change quality. "
-                "Needs your decision.",
-        )
+    if key in YELLOW_REASONS:
+        return build(Result.REVIEW_REQUIRED, why=YELLOW_REASONS[key])
 
     return build(Result.UNSUPPORTED, why="No supported operation can satisfy this requirement.")
 

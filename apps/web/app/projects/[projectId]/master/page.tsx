@@ -7,6 +7,7 @@ import { Working } from "@/components/Status";
 import { Workspace } from "@/components/workspace/Workspace";
 import { ProjectRail } from "@/components/workspace/Rail";
 import { api, uploadToSignedUrl } from "@/lib/api";
+import type { UploadProgress } from "@/lib/api";
 import { codecName, formatDuration, resolutionName } from "@/lib/language";
 import type { Asset, Project } from "@/lib/types";
 
@@ -194,14 +195,43 @@ function Slot({
   prominent?: boolean;
 }) {
   const [phase, setPhase] = useState<"idle" | "sending" | "measuring">("idle");
-  const [sent, setSent] = useState(0);
+  const [progress, setProgress] = useState<UploadProgress | null>(null);
   const [failure, setFailure] = useState<string | null>(null);
   const [language, setLanguage] = useState("");
+  // Kept so an interrupted upload can be continued into the same object and
+  // the same asset row. Starting again from the intent would leave an orphan.
+  const [pending, setPending] = useState<
+    { file: File; url: string; assetId: string } | null
+  >(null);
+
+  async function send(file: File, url: string, assetId: string) {
+    setFailure(null);
+    setPhase("sending");
+    try {
+      await uploadToSignedUrl(url, file, setProgress);
+      setPhase("measuring");
+      await api.completeUpload(projectId, assetId);
+      setPending(null);
+      setProgress(null);
+      await onDone();
+      setPhase("idle");
+    } catch (caught) {
+      // The session and the asset survive, so this offers continuing rather
+      // than starting over.
+      setPending({ file, url, assetId });
+      setFailure(
+        caught instanceof Error
+          ? caught.message
+          : "That upload did not finish.",
+      );
+      setPhase("idle");
+    }
+  }
 
   async function upload(file: File) {
     setFailure(null);
     setPhase("sending");
-    setSent(0);
+    setProgress(null);
     try {
       const intent = await api.uploadIntent(projectId, {
         role: slot.role,
@@ -210,16 +240,10 @@ function Slot({
         byte_size: file.size,
         ...(slot.role === "subtitle" && language ? { language } : {}),
       });
-
-      await uploadToSignedUrl(intent.upload_url, file, setSent);
-
-      setPhase("measuring");
-      await api.completeUpload(projectId, intent.asset_id);
-      await onDone();
-      setPhase("idle");
+      await send(file, intent.upload_url, intent.asset_id);
     } catch (caught) {
       setFailure(
-        caught instanceof Error ? caught.message : "That upload did not complete.",
+        caught instanceof Error ? caught.message : "That upload could not start.",
       );
       setPhase("idle");
     }
@@ -295,12 +319,36 @@ function Slot({
           <div className="h-[2px] w-full overflow-hidden rounded-full bg-ink-200">
             <div
               className="h-full bg-paper-200 transition-[width] duration-200"
-              style={{ width: `${Math.round(sent * 100)}%` }}
+              style={{ width: `${percent(progress)}%` }}
             />
           </div>
+          {/* A percentage on its own tells somebody watching a long upload
+              nothing about whether to keep waiting. */}
           <p className="mt-2 text-sm text-paper-300" role="status">
-            Uploading securely · {Math.round(sent * 100)}%
+            {progress?.stalled
+              ? "Still waiting on your connection"
+              : "Uploading securely"}{" "}
+            · {percent(progress)}%
+            {progress && progress.total > 0 && (
+              <span className="text-paper-400">
+                {" "}
+                · {formatBytes(progress.uploaded)} of {formatBytes(progress.total)}
+              </span>
+            )}
           </p>
+          {progress?.stalled ? (
+            <p className="mt-1 max-w-measure text-sm leading-relaxed text-paper-400">
+              Nothing has moved for a little while. Preflight is still trying,
+              and everything already sent is safe — if it gives up you will be
+              able to carry on from here rather than start again.
+            </p>
+          ) : (
+            remaining(progress) && (
+              <p className="mt-1 text-sm text-paper-400">
+                About {remaining(progress)} left at the current speed.
+              </p>
+            )
+          )}
         </div>
       )}
 
@@ -311,12 +359,33 @@ function Slot({
       )}
 
       {failure && (
-        <p
+        <div
           role="alert"
-          className="mt-4 border-l-2 border-stop bg-stop-bg/40 py-2.5 pl-3 text-sm text-paper-100"
+          className="mt-4 border-l-2 border-stop bg-stop-bg/40 px-3 py-2.5"
         >
-          {failure}
-        </p>
+          <p className="text-sm text-paper-100">{failure}</p>
+          {pending ? (
+            <>
+              <p className="mt-1 max-w-measure text-sm leading-relaxed text-paper-300">
+                Everything already uploaded is still there. Continuing sends
+                only what is missing, into the same file — you do not need to
+                start a new delivery.
+              </p>
+              <button
+                type="button"
+                onClick={() => void send(pending.file, pending.url, pending.assetId)}
+                className="mt-3 rounded-[3px] bg-paper-000 px-4 py-2 text-sm font-medium
+                           text-ink-000 transition hover:bg-white"
+              >
+                Continue uploading
+              </button>
+            </>
+          ) : (
+            <p className="mt-1 text-sm text-paper-300">
+              Choose the file again to retry.
+            </p>
+          )}
+        </div>
       )}
 
       {asset && <Measured asset={asset} isMaster={slot.required} />}
@@ -471,4 +540,22 @@ function guessType(filename: string): string {
     default:
       return "image/jpeg";
   }
+}
+
+function percent(progress: UploadProgress | null): number {
+  if (!progress || progress.total === 0) return 0;
+  return Math.min(100, Math.round((progress.uploaded / progress.total) * 100));
+}
+
+/** A time somebody can decide against, rather than a spinner. */
+function remaining(progress: UploadProgress | null): string | null {
+  if (!progress || !progress.bytesPerSecond || progress.bytesPerSecond <= 0) return null;
+  const left = progress.total - progress.uploaded;
+  if (left <= 0) return null;
+  const seconds = left / progress.bytesPerSecond;
+  if (seconds < 90) return "a minute";
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 60) return `${minutes} minutes`;
+  const hours = Math.floor(minutes / 60);
+  return `${hours} hour${hours === 1 ? "" : "s"} ${minutes % 60} minutes`;
 }

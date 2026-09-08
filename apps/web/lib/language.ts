@@ -373,3 +373,110 @@ export function codecName(codec: string | null | undefined): string | null {
   };
   return known[codec.toLowerCase()] ?? codec;
 }
+
+/**
+ * Repair operations, in the words of the person whose film it is.
+ *
+ * `normalise_loudness` and `rewrite_container_metadata` were on screen in
+ * production. They are precise and they are ours, not the user's. The
+ * identifier stays available under technical details, because it is what the
+ * passport and the worker log record.
+ */
+const OPERATION_LABELS: Record<string, string> = {
+  normalise_loudness: "Adjusting audio loudness",
+  rewrite_container_metadata: "Updating delivery metadata",
+  convert_subtitles: "Converting the subtitle file",
+  resize_poster: "Resizing the poster",
+  normalise_metadata: "Reformatting the delivery details",
+  rename_and_layout: "Naming the files as the destination asks",
+  build_manifest: "Recording a checksum for every file",
+  reencode_video: "Re-encoding the picture",
+  crop_poster: "Cropping the poster",
+  translate_subtitles: "Translating the subtitles",
+};
+
+/** Past tense, for describing what was already done. */
+const OPERATION_DONE: Record<string, string> = {
+  normalise_loudness: "Adjusted the audio loudness",
+  rewrite_container_metadata: "Updated the delivery metadata",
+  convert_subtitles: "Converted the subtitle file",
+  resize_poster: "Resized the poster",
+  normalise_metadata: "Reformatted the delivery details",
+  rename_and_layout: "Named the files as the destination asks",
+  build_manifest: "Recorded a checksum for every file",
+};
+
+export function operationLabel(operation: string): string {
+  return OPERATION_LABELS[operation] ?? humaniseIdentifier(operation);
+}
+
+export function operationDone(operation: string): string {
+  return OPERATION_DONE[operation] ?? humaniseIdentifier(operation);
+}
+
+/** An operation nobody has named yet still reads as English, not as code. */
+function humaniseIdentifier(value: string): string {
+  const words = value.replace(/_/g, " ").trim();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/**
+ * What a person can actually do about a requirement Preflight will not fix.
+ *
+ * Reporting "needs your decision" and stopping is not a decision point, it is
+ * a dead end. Every one of these has a real answer, and the answer is almost
+ * always work done outside Preflight and brought back - so it says which work,
+ * and says that coming back means uploading the new version and checking
+ * again.
+ */
+export function whatYouCanDo(assetType: string, fieldName: string): string {
+  const key = `${assetType}.${fieldName}`;
+  const advice: Record<string, string> = {
+    "audio.channels":
+      "Ask whoever mixed the film for a version with this channel layout. A "
+      + "re-mix is the only way to get there honestly; folding or spreading "
+      + "channels automatically would change how the film sounds.",
+    "audio.codec":
+      "Export a version with this audio format from your editing or mastering "
+      + "software, where you can hear the result before committing to it.",
+    "audio.sampleRateHz":
+      "Export a version at this sample rate from your editing software.",
+    "audio.bitrateBps":
+      "Export the audio at this data rate from your editing or mastering "
+      + "software.",
+    "video.codec":
+      "Export a new master in this format from your editing software, where "
+      + "you can check the result frame by frame.",
+    "video.bitrateBps":
+      "Export a new master at this data rate. Your editing or encoding "
+      + "software will let you judge the quality before you deliver it.",
+    "video.widthPx":
+      "Export a new master at this size rather than scaling the existing one.",
+    "video.heightPx":
+      "Export a new master at this size rather than scaling the existing one.",
+    "video.frameRate":
+      "Export a new master at this frame rate. Converting between rates "
+      + "changes motion, so it is worth watching the result.",
+    "video.profile":
+      "Export a new master with this encoding profile from your editing "
+      + "software.",
+    "video.container":
+      "Export a new master as this file type from your editing software.",
+    "subtitle.burnedIn":
+      "This destination wants the subtitles visible in the picture itself. "
+      + "Burn them in when you export, then upload that version.",
+    "subtitle.language":
+      "Supply a subtitle file in this language. A translation needs a person "
+      + "who speaks it, so Preflight will not generate one.",
+  };
+
+  return (
+    advice[key]
+    ?? "This one needs a change Preflight will not make on your behalf. Make it "
+       + "wherever you finish your film, then upload the new version."
+  );
+}
+
+/** The one sentence that closes the loop after work done elsewhere. */
+export const COME_BACK =
+  "When you have the new version, upload it here and run the check again.";

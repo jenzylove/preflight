@@ -18,13 +18,17 @@ import { STAGE, type ProjectStage } from "@/components/Status";
  * there is nothing there yet.
  */
 
+//: Named for what the person is doing, not for the route or the table behind
+//: it. "Master", "Preflight" and "Passport" are all real words in this trade
+//: and none of them told a first-time filmmaker what the step was. The route
+//: keys are unchanged: this is what the step is called, not where it lives.
 const STEPS = [
-  { key: "master", label: "Master", reachedAt: 0 },
-  { key: "destinations", label: "Destinations", reachedAt: 1 },
-  { key: "preflight", label: "Preflight", reachedAt: 2 },
-  { key: "plan", label: "Repair", reachedAt: 3 },
-  { key: "packages", label: "Packages", reachedAt: 5 },
-  { key: "passport", label: "Passport", reachedAt: 5 },
+  { key: "master", label: "Film", reachedAt: 0 },
+  { key: "destinations", label: "Destination", reachedAt: 1 },
+  { key: "preflight", label: "Check", reachedAt: 2 },
+  { key: "plan", label: "Fix", reachedAt: 3 },
+  { key: "packages", label: "Package", reachedAt: 5 },
+  { key: "passport", label: "Proof", reachedAt: 5 },
 ] as const;
 
 /** How far a project's backend state carries it along that sequence. */
@@ -48,19 +52,21 @@ export function ProjectRail({ project }: { project: Project }) {
 
   return (
     <div className="mb-10 border-b border-line pb-6">
-      <div className="flex flex-wrap items-baseline gap-x-4 gap-y-2">
-        <Link
-          href="/projects"
-          className="slate text-paper-400 transition hover:text-paper-200"
-        >
-          Projects
-        </Link>
-        <span aria-hidden="true" className="text-paper-500">
-          /
-        </span>
+      {/* "Projects / loft" read as two system words side by side. Saying what
+          the second one is removes the guesswork. */}
+      <Link
+        href="/projects"
+        className="slate inline-block text-paper-400 transition hover:text-paper-200"
+      >
+        &larr; All projects
+      </Link>
+      <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
         <h1 className="font-display text-2xl leading-none text-paper-000">
           {project.title}
         </h1>
+        <span className="text-sm text-paper-400">
+          the film you are preparing
+        </span>
       </div>
 
       <nav aria-label="Delivery steps" className="mt-5">

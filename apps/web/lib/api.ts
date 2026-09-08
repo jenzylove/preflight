@@ -260,28 +260,149 @@ export const api = {
  * issued. The file never passes through the Preflight API, which is why a
  * feature-length master is possible at all.
  */
+/** How the upload is going, in terms the interface can speak plainly about. */
+export interface UploadProgress {
+  /** Bytes the server has acknowledged, not bytes handed to the socket. */
+  uploaded: number;
+  total: number;
+  /** Bytes per second over the recent past, once there is enough to judge. */
+  bytesPerSecond: number | null;
+  /** True when nothing has been acknowledged for a while. */
+  stalled: boolean;
+}
+
+export class UploadInterrupted extends Error {
+  /** Bytes safely committed, so the same upload can be continued. */
+  readonly uploaded: number;
+
+  constructor(message: string, uploaded: number) {
+    super(message);
+    this.name = "UploadInterrupted";
+    this.uploaded = uploaded;
+  }
+}
+
+//: Cloud Storage requires resumable chunks to be a multiple of 256 KiB.
+const CHUNK = 8 * 1024 * 1024;
+const CHUNK_TIMEOUT_MS = 120_000;
+const STALL_AFTER_MS = 45_000;
+
+/**
+ * Send a file to its resumable session, one chunk at a time.
+ *
+ * This was a single PUT of the whole file. Three things followed from that,
+ * and a 275 MB upload found all of them: progress came from
+ * `xhr.upload.onprogress`, which counts bytes handed to the socket rather than
+ * bytes the server has accepted, so the bar ran ahead of the wire and then sat
+ * still; there was no timeout, so a dead connection was indistinguishable from
+ * a slow one and waited forever; and there was no way back afterwards except
+ * starting the whole project again.
+ *
+ * Chunking fixes all three at once. Every chunk is acknowledged, so progress is
+ * a fact rather than an estimate; a chunk that does not complete in time fails
+ * rather than hanging; and the session can be asked what it already holds, so
+ * continuing costs only what was not yet sent. The object is the same object
+ * either way, so resuming cannot duplicate or corrupt the asset.
+ */
 export async function uploadToSignedUrl(
   url: string,
   file: File,
-  onProgress?: (fraction: number) => void,
+  onProgress?: (progress: UploadProgress) => void,
+  signal?: AbortSignal,
 ): Promise<void> {
+  const total = file.size;
+  let uploaded = await committedBytes(url, total);
+
+  // Recent throughput, so "slow" and "stopped" can be told apart.
+  let lastMovedAt = Date.now();
+  let lastMovedBytes = uploaded;
+
+  const report = (stalled = false) => {
+    const seconds = (Date.now() - lastMovedAt) / 1000;
+    const moved = uploaded - lastMovedBytes;
+    onProgress?.({
+      uploaded,
+      total,
+      bytesPerSecond: seconds > 1 && moved > 0 ? moved / seconds : null,
+      stalled,
+    });
+  };
+  report();
+
+  while (uploaded < total) {
+    if (signal?.aborted) throw new UploadInterrupted("Upload paused.", uploaded);
+
+    const end = Math.min(uploaded + CHUNK, total);
+    const watchdog = setInterval(() => report(Date.now() - lastMovedAt > STALL_AFTER_MS), 5000);
+
+    try {
+      const status = await putChunk(url, file.slice(uploaded, end), uploaded, end - 1, total, signal);
+      if (status === 308 || status === 200 || status === 201) {
+        const rate = (end - uploaded) / Math.max(1, (Date.now() - lastMovedAt) / 1000);
+        lastMovedBytes = uploaded;
+        lastMovedAt = Date.now();
+        uploaded = end;
+        onProgress?.({ uploaded, total, bytesPerSecond: rate, stalled: false });
+      } else {
+        throw new UploadInterrupted(`The upload was refused (${status}).`, uploaded);
+      }
+    } catch (caught) {
+      if (caught instanceof UploadInterrupted) throw caught;
+      // Ask the session what it actually holds before reporting a position:
+      // a chunk can be committed even when the response never arrives.
+      const confirmed = await committedBytes(url, total).catch(() => uploaded);
+      throw new UploadInterrupted(
+        "The connection dropped before your film finished uploading.",
+        confirmed,
+      );
+    } finally {
+      clearInterval(watchdog);
+    }
+  }
+}
+
+/** How much of this upload the server already has. */
+async function committedBytes(url: string, total: number): Promise<number> {
+  return new Promise((resolve) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url, true);
+    xhr.setRequestHeader("Content-Range", `bytes */${total}`);
+    xhr.timeout = 30_000;
+    xhr.onload = () => {
+      if (xhr.status === 200 || xhr.status === 201) return resolve(total);
+      const range = xhr.getResponseHeader("Range");
+      const match = range?.match(/bytes=0-(\d+)/);
+      resolve(match ? Number(match[1]) + 1 : 0);
+    };
+    // A session that cannot be queried is treated as empty, which is safe:
+    // re-sending a chunk overwrites the same bytes of the same object.
+    xhr.onerror = () => resolve(0);
+    xhr.ontimeout = () => resolve(0);
+    xhr.send();
+  });
+}
+
+function putChunk(
+  url: string,
+  blob: Blob,
+  start: number,
+  end: number,
+  total: number,
+  signal?: AbortSignal,
+): Promise<number> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", url, true);
-    xhr.setRequestHeader("Content-Type", file.type);
-
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total);
-    };
-    xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(`Upload failed (${xhr.status})`));
-    xhr.onerror = () => reject(new Error("Upload failed. Check your connection."));
-
-    xhr.send(file);
+    xhr.setRequestHeader("Content-Range", `bytes ${start}-${end}/${total}`);
+    xhr.timeout = CHUNK_TIMEOUT_MS;
+    xhr.onload = () => resolve(xhr.status);
+    xhr.onerror = () => reject(new Error("network"));
+    xhr.ontimeout = () => reject(new Error("timeout"));
+    signal?.addEventListener("abort", () => xhr.abort(), { once: true });
+    xhr.send(blob);
   });
 }
+
 
 // ---------------------------------------------------------------------------
 // Destinations, preflight, plan, packages, passport, delivery

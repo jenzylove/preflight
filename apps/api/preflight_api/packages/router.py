@@ -73,8 +73,26 @@ class PackageOut(BaseModel):
     files: list[FileOut]
     transformations: list[TransformationOut]
     limitations: list[str]
+    #: The checks that are not satisfied, structured rather than as prose.
+    #:
+    #: The package screen used to render the limitation sentences directly,
+    #: which meant a filmmaker was shown "subtitle.cueCount (NOT_MEASURED)" as
+    #: the result of their delivery. The same information grouped and
+    #: translated is the difference between a report and an instruction.
+    outstanding: list[OutstandingOut]
+    checks_passed: int
+    checks_total: int
     validator_version: str | None
     created_at: datetime
+
+
+class OutstandingOut(BaseModel):
+    asset_type: str
+    field: str
+    published: str
+    measured: str | None
+    result: str
+    severity: str
 
 
 def _package_out(row: Package, session: Session) -> PackageOut:
@@ -112,6 +130,23 @@ def _package_out(row: Package, session: Session) -> PackageOut:
             for t in manifest.get("transformations", [])
         ],
         limitations=manifest.get("limitations", []),
+        outstanding=[
+            OutstandingOut(
+                asset_type=str(a.get("field", ".")).split(".", 1)[0],
+                field=str(a.get("field", ".")).split(".", 1)[-1],
+                published=str(a.get("published", "")),
+                measured=None if a.get("measured") is None else str(a.get("measured")),
+                result=str(a.get("result", "")),
+                severity=str(a.get("severity", "")),
+            )
+            for a in assertions
+            if a.get("result") != "PASS" and a.get("severity") == "required"
+        ],
+        checks_passed=sum(
+            1 for a in assertions
+            if a.get("result") == "PASS" and a.get("severity") == "required"
+        ),
+        checks_total=sum(1 for a in assertions if a.get("severity") == "required"),
         validator_version=manifest.get("validatorVersion"),
         created_at=row.created_at,
     )
