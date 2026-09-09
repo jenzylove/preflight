@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -39,7 +40,13 @@ def check(name: str, ok: bool, detail: str = "") -> bool:
 
 
 def env(key: str) -> str:
-    for line in (ROOT / ".env").read_text(encoding="utf-8").splitlines():
+    value = os.environ.get(key)
+    if value:
+        return value
+    dotenv = ROOT / ".env"
+    if not dotenv.exists():
+        return ""
+    for line in dotenv.read_text(encoding="utf-8").splitlines():
         if line.startswith(f"{key}="):
             return line.split("=", 1)[1].strip()
     return ""
@@ -253,8 +260,9 @@ def main() -> int:
     check("a repair plan was generated", bool(plan.get("plan_id")), plan["digest"])
     check("green operations identified", len(green) > 0, f"{len(green)}")
     if yellow:
-        check("yellow operations shown but not executable",
-              all(not s["executable"] for s in yellow), f"{len(yellow)} shown")
+        check("yellow operations require explicit approval",
+              all(s["executable"] == (s["operation"] == "technical_conform")
+                  for s in yellow), f"{len(yellow)} shown")
 
     if matrix["blocking"]:
         print(f"      still blocking: {', '.join(matrix['blocking'][:8])}")
