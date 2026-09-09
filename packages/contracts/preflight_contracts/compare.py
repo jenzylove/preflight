@@ -188,12 +188,14 @@ def _satisfied(rule: Rule, measured: Any) -> bool:
 def _norm(value: Any) -> Any:
     """Normalise for comparison so 'H.264', 'h264' and 'AVC' do not disagree."""
     if isinstance(value, str):
-        cleaned = value.strip().lower().replace("-", "").replace(".", "").replace("_", "")
+        raw = value.strip().lower()
+        cleaned = raw.replace("-", "").replace(".", "").replace("_", "")
         aliases = {
             "avc": "h264", "avc1": "h264", "mpeg4avc": "h264",
             "aaclc": "aac", "mp4a": "aac", "ac3": "ac3",
             "lpcm": "pcm", "pcms16le": "pcm", "pcms24le": "pcm",
             "proreslt": "prores",
+            "apple prores lt": "prores",
             "subrip": "srt", "webvtt": "vtt",
             "jpg": "jpeg",
             "bt709": "bt709", "rec709": "bt709", "itur bt709": "bt709",

@@ -447,7 +447,10 @@ def _parameters_for(
 ) -> dict[str, Any]:
     if operation == "normalise_loudness":
         window = loudness_targets.get(destination_id)
-        target = round(sum(window) / 2, 2) if window else -23.0
+        target = (
+            round(sum(window) / 2, 2)
+            if window else (_numeric_target(assertion.expected) or -23.0)
+        )
         return {"targetLufs": target, "truePeakDbtp": -3.0, "mode": "linear"}
 
     if operation == "rewrite_container_metadata":

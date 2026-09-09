@@ -53,6 +53,13 @@ class TestComparison:
         )
         assert assertion.result is Result.PASS
 
+    def test_apple_prores_lt_alias_matches_measured_prores_profile(self):
+        assertion = evaluate(
+            rule("codec", Operator.EQ, "Apple ProRes LT", AssetType.VIDEO),
+            {"codec": "prores"}, "d",
+        )
+        assert assertion.result is Result.PASS
+
 
 class TestAmbiguity:
     def test_conflicting_sources_block_rather_than_guess(self):

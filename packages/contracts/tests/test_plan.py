@@ -48,6 +48,12 @@ class TestPlanConstruction:
         plan = build_plan({"artdocfest": [assertion()]}, loudness_targets=LOUDNESS)
         assert plan.green[0].parameters["targetLufs"] == -19.5
 
+    def test_an_exact_loudness_requirement_is_used_when_no_window_exists(self):
+        plan = build_plan({"sundance": [assertion(
+            expected="eq -24", measured=-4.85,
+        )]})
+        assert plan.green[0].parameters["targetLufs"] == -24
+
     def test_a_passing_assertion_produces_no_work(self):
         plan = build_plan({"d": [assertion(result=Result.PASS)]})
         assert plan.steps == []

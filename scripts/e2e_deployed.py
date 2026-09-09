@@ -14,12 +14,16 @@ services actually returned.
 from __future__ import annotations
 
 import http.client
+import io
 import json
 import os
+import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
+import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -207,7 +211,7 @@ def main() -> int:
           f"{total_assertions} across {len(run['destinations'])} destinations")
     print("  failing assertions:", json.dumps([
         {"destination": d.get("destination_id"), "field": a.get("field"),
-         "expected": a.get("expected"), "measured": a.get("measured"),
+         "published": a.get("published"), "measured": a.get("measured"),
          "result": a.get("result")}
         for d in run["destinations"] for a in d.get("assertions", [])
         if a.get("result") not in ("PASS", "NOT_APPLICABLE")
@@ -295,6 +299,40 @@ def main() -> int:
     check("packages were validated against their outputs",
           all(p.get("validator_version") for p in packages) if packages else False)
     verified = [p for p in packages if p.get("verified")]
+    print("  package results:", json.dumps([
+        {"destination": p.get("destination_id"),
+         "requirements": p.get("requirements_satisfied"),
+         "verified": p.get("verified"),
+         "transformations": p.get("transformations"),
+         "outstanding": p.get("outstanding")}
+        for p in packages
+    ], sort_keys=True))
+    with tempfile.TemporaryDirectory(prefix="preflight-e2e-") as download_dir:
+        for package in packages:
+            status, intent = request(
+                f"{API}/v1/projects/{project_id}/packages/{package['id']}"
+                "/download-intent", "POST", token=token,
+            )
+            if status != 200 or not isinstance(intent, dict):
+                continue
+            with urllib.request.urlopen(intent["url"], timeout=600) as response:  # noqa: S310
+                archive = zipfile.ZipFile(io.BytesIO(response.read()))
+                media = next(
+                    (name for name in archive.namelist()
+                     if name.lower().endswith((".mov", ".mp4"))), None
+                )
+                if media is None:
+                    continue
+            media_path = Path(download_dir) / Path(media).name
+            media_path.write_bytes(archive.read(media))
+            probe = subprocess.run(
+                ["ffprobe", "-v", "error", "-show_streams", "-show_format",
+                 "-of", "json", str(media_path)],
+                capture_output=True, text=True, check=False,
+            )
+            if probe.returncode == 0:
+                print(f"  conformed media {package.get('destination_id')}: "
+                      + json.dumps(json.loads(probe.stdout), sort_keys=True))
     check("verification decided by the validator, not the worker",
           len(packages) > 0,
           f"{len(verified)}/{len(packages)} verified")
