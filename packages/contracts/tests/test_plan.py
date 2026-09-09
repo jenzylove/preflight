@@ -82,6 +82,51 @@ class TestSafetyClassification:
         assert plan.steps == []
         assert plan.blocked[0]["safety"] == "red"
 
+    def test_technical_media_failures_become_one_explicit_conform(self):
+        plan = build_plan({
+            "sundance": [
+                assertion(field_name="codec", asset=AssetType.VIDEO,
+                          result=Result.REVIEW_REQUIRED, operation=None,
+                          rule_id="v-codec", measured="h264", expected="eq ProRes LT"),
+                assertion(field_name="container", asset=AssetType.VIDEO,
+                          result=Result.REVIEW_REQUIRED, operation=None,
+                          rule_id="v-container", measured="mp4", expected="eq mov"),
+                assertion(field_name="bitrateBps", asset=AssetType.VIDEO,
+                          result=Result.REVIEW_REQUIRED, operation=None,
+                          rule_id="v-bitrate", measured=8_000_000,
+                          expected="between 20_000_000 and 30_000_000"),
+                assertion(field_name="codec", asset=AssetType.AUDIO,
+                          result=Result.REVIEW_REQUIRED, operation=None,
+                          rule_id="a-codec", measured="aac", expected="eq PCM"),
+                assertion(field_name="sampleRateHz", asset=AssetType.AUDIO,
+                          result=Result.REVIEW_REQUIRED, operation=None,
+                          rule_id="a-rate", measured=44_100, expected="eq 48000"),
+            ]
+        })
+        assert len(plan.technical_conform) == 1
+        conform = plan.technical_conform[0]
+        assert conform.operation == "technical_conform"
+        assert set(conform.resolves) == {"v-codec", "v-container", "v-bitrate", "a-codec", "a-rate"}
+        assert conform.parameters["videoCodec"] == "prores"
+        assert conform.parameters["videoProfile"] == 1
+        assert conform.parameters["container"] == "mov"
+        assert conform.parameters["videoBitrateBps"] == 25_000_000
+        assert conform.parameters["audioCodec"] == "pcm_s24le"
+        assert conform.parameters["audioSampleRateHz"] == 48_000
+
+    def test_channel_layout_stays_a_human_new_asset_blocker(self):
+        plan = build_plan({
+            "sundance": [assertion(
+                field_name="channels", asset=AssetType.AUDIO,
+                result=Result.REVIEW_REQUIRED, operation=None,
+                measured=2, expected="eq 6",
+                explanation="A six-channel mix is a new mix, not a conversion.",
+            )]
+        })
+        assert plan.steps == []
+        assert plan.blocked[0]["safety"] == "red"
+        assert "new mix" in plan.blocked[0]["reason"]
+
 
 class TestUnresolved:
     def test_an_ambiguous_requirement_asks_the_user_rather_than_guessing(self):
@@ -166,6 +211,21 @@ class TestOrderingAndPreservation:
         )
         rewrite = next(s for s in plan.steps if s.operation == "rewrite_container_metadata")
         assert rewrite.depends_on
+        assert rewrite.parameters == {"displayAspectRatio": "16:9"}
+
+    def test_metadata_rewrite_uses_the_published_values_that_failed(self):
+        plan = build_plan({
+            "sundance": [
+                assertion(field_name="colourPrimaries", asset=AssetType.VIDEO,
+                          operation="rewrite_container_metadata", rule_id="r-colour",
+                          expected="eq bt2020", measured="bt709"),
+                assertion(field_name="fastStart", asset=AssetType.VIDEO,
+                          operation="rewrite_container_metadata", rule_id="r-fast",
+                          expected="eq True", measured=False),
+            ]
+        })
+        rewrite = next(s for s in plan.steps if s.operation == "rewrite_container_metadata")
+        assert rewrite.parameters == {"colourPrimaries": "bt2020", "fastStart": True}
 
     def test_untouched_assets_are_reported_as_preserved(self):
         plan = build_plan({"d": [assertion()]}, loudness_targets={"d": (-21.0, -18.0)})

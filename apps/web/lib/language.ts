@@ -395,6 +395,7 @@ const OPERATION_LABELS: Record<string, string> = {
   reencode_video: "Re-encoding the picture",
   crop_poster: "Cropping the poster",
   translate_subtitles: "Translating the subtitles",
+  technical_conform: "Preparing the technical conform",
 };
 
 /** Past tense, for describing what was already done. */

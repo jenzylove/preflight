@@ -333,8 +333,9 @@ class RepairStep(Base):
 
     __table_args__ = (
         CheckConstraint("safety_level IN ('green','yellow','red')", name="ck_repair_safety"),
-        # Only green operations are ever executed automatically. Yellow and red
-        # steps may be planned and displayed, never run.
+        # Yellow is also used for the explicit technical conform tier. The API
+        # and worker allow only that named operation after digest-bound
+        # approval; other yellow and all red steps remain human/new-asset work.
     )
 
 

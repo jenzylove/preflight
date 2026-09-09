@@ -24,7 +24,12 @@ from preflight_contracts.compare import (
     is_ready,
 )
 from preflight_contracts.normalise import deduplicate_conflicts
-from preflight_contracts.plan import OPERATION_CATALOGUE, Plan, build_plan
+from preflight_contracts.plan import (
+    OPERATION_CATALOGUE,
+    Plan,
+    build_plan,
+    operation_is_executable,
+)
 from preflight_contracts.rules import AssetType, Severity
 from preflight_contracts.state import ProjectState, TransitionError, transition_project
 from pydantic import BaseModel, Field
@@ -241,16 +246,16 @@ def _plan_out(
                 row_for[step.step_id] = str(match.id)
                 used.add(str(match.id))
 
-    def out(step, executable: bool) -> StepOut:
-        rendered = _step_out(step, executable)
+    def out(step) -> StepOut:
+        rendered = _step_out(step, operation_is_executable(step.operation))
         rendered.step_id = row_for.get(step.step_id, rendered.step_id)
         return rendered
 
     return PlanOut(
         plan_id=plan_row.id if plan_row is not None else None,
         digest=plan.digest(),
-        steps=[out(s, True) for s in plan.green],
-        needs_your_decision=[out(s, False) for s in plan.needs_decision],
+        steps=[out(s) for s in plan.green],
+        needs_your_decision=[out(s) for s in plan.needs_decision],
         blocked=plan.blocked,
         unresolved=plan.unresolved,
         preserved_assets=plan.preserved_assets(roles),
@@ -383,10 +388,18 @@ def _limitations(plan: Plan, matrices: list[DestinationMatrix]) -> list[str]:
             f"{len(plan.blocked)} requirement(s) need professional work Preflight "
             f"does not perform."
         )
-    if plan.needs_decision:
+    if plan.technical_conform:
         notes.append(
-            f"{len(plan.needs_decision)} repair(s) would change the picture or audio "
-            f"and will not run without a separate decision from you."
+            f"{len(plan.technical_conform)} technical conform(s) are ready to run "
+            "after you approve the exact transformation."
+        )
+    human_decisions = [
+        step for step in plan.needs_decision
+        if step.operation != "technical_conform"
+    ]
+    if human_decisions:
+        notes.append(
+            f"{len(human_decisions)} item(s) still need human work or a new asset."
         )
     notes.append(
         "Preflight verifies against published requirements as retrieved. It cannot "
@@ -472,9 +485,22 @@ def approve_plan(
             ),
         )
 
-    # Approving a plan never authorises the operations Preflight refuses to
-    # automate. The worker filters to green steps regardless of what is listed
-    # here, so a yellow id in the payload grants nothing.
+    steps = session.scalars(
+        select(RepairStep).where(RepairStep.repair_plan_id == plan_row.id)
+    ).all()
+    by_id = {str(step.id): step for step in steps}
+    unknown = [step_id for step_id in payload.approved_step_ids if step_id not in by_id]
+    if unknown:
+        raise HTTPException(status_code=422, detail="Approval contains a step not in this plan")
+    non_executable = [
+        step_id for step_id in payload.approved_step_ids
+        if not operation_is_executable(by_id[step_id].operation)
+    ]
+    if non_executable:
+        raise HTTPException(
+            status_code=422,
+            detail="Approval contains a transformation that requires human work",
+        )
 
     existing = session.scalar(
         select(Approval).where(
@@ -512,8 +538,8 @@ def approve_plan(
         plan_digest=approval.repair_plan_digest,
         approved_steps=payload.approved_step_ids,
         note=(
-            "Only the green operations in this plan will run. Anything that "
-            "would change the picture or audio needs a separate decision."
+            "Approved safe fixes and the explicitly approved technical conform "
+            "will run. Human/new-asset work remains untouched."
         ),
     )
 

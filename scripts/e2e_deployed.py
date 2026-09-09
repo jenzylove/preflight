@@ -207,23 +207,29 @@ def main() -> int:
     print("\nREPAIR PLAN")
     plan = run.get("plan") or {}
     green = [s for s in plan.get("steps", []) if s["safety"] == "green"]
-    non_green = [s for s in plan.get("steps", []) if s["safety"] != "green"]
+    decisions = plan.get("needs_your_decision", [])
+    conform = [s for s in decisions if s.get("operation") == "technical_conform"]
+    human = [s for s in decisions if s.get("operation") != "technical_conform"]
     check("plan generated with a digest", bool(plan.get("digest")), plan.get("digest", ""))
     check("green operations identified", len(green) > 0, f"{len(green)} executable")
-    check("non-green operations are not executable",
-          all(not s["executable"] for s in non_green),
-          f"{len(non_green)} shown but blocked")
+    check("one technical conform is executable after approval",
+          len(conform) == 1 and all(s["executable"] for s in conform),
+          f"{len(conform)} conform step(s)")
+    check("human decisions remain non-executable",
+          all(not s["executable"] for s in human),
+          f"{len(human)} shown but blocked")
 
     plan_id = plan.get("plan_id")
-    if not plan_id or not green:
-        check("plan is runnable", False, "no plan id or no green steps")
+    approved_steps = green + conform
+    if not plan_id or not approved_steps:
+        check("plan is runnable", False, "no plan id or no executable steps")
         return report()
 
     print("\nAPPROVAL AND EXECUTION")
     status, approval = request(
         f"{API}/v1/projects/{project_id}/repair-plans/{plan_id}/approve", "POST",
         {"plan_digest": plan["digest"],
-         "approved_step_ids": [s["step_id"] for s in green]}, token=token,
+         "approved_step_ids": [s["step_id"] for s in approved_steps]}, token=token,
     )
     check("approval bound to the plan digest",
           status == 201 and isinstance(approval, dict)

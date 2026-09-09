@@ -102,10 +102,10 @@ def _guard_step(step: dict[str, Any], approved_digest: str, plan_digest: str) ->
     spec = OPERATION_CATALOGUE.get(operation)
     if spec is None:
         raise ExecutionRefused(f"operation {operation!r} is not in the catalogue")
-    if spec["safety"] is not Safety.GREEN:
+    if spec["safety"] is not Safety.GREEN and operation != "technical_conform":
         raise ExecutionRefused(
             f"operation {operation!r} is {spec['safety'].value} and is never "
-            f"executed automatically"
+            f"executed by the worker"
         )
 
 
@@ -187,11 +187,34 @@ def _dispatch(
         out = work_dir / output_name(plan_digest, step_id, operation, source.suffix)
         return repairs.rewrite_container_metadata(
             source, out,
-            display_aspect_ratio=parameters.get("displayAspectRatio", "16:9"),
-            colour_primaries=parameters.get("colourPrimaries", "bt709"),
-            colour_transfer=parameters.get("colourTransfer", "bt709"),
-            colour_matrix=parameters.get("colourMatrix", "bt709"),
-            fast_start=bool(parameters.get("fastStart", True)),
+            display_aspect_ratio=parameters.get("displayAspectRatio"),
+            colour_primaries=parameters.get("colourPrimaries"),
+            colour_transfer=parameters.get("colourTransfer"),
+            colour_matrix=parameters.get("colourMatrix"),
+            fast_start=bool(parameters.get("fastStart", False)),
+        )
+
+    if operation == "technical_conform":
+        container = str(parameters.get("container") or source.suffix.lstrip(".")).lower()
+        suffix = f".{container}" if container in {"mov", "mp4"} else source.suffix
+        out = work_dir / output_name(plan_digest, step_id, operation, suffix)
+        return repairs.technical_conform(
+            source, out,
+            video_codec=parameters.get("videoCodec"),
+            video_profile=(int(parameters["videoProfile"])
+                           if parameters.get("videoProfile") is not None else None),
+            video_width_px=(int(parameters["videoWidthPx"])
+                           if parameters.get("videoWidthPx") is not None else None),
+            video_height_px=(int(parameters["videoHeightPx"])
+                             if parameters.get("videoHeightPx") is not None else None),
+            video_bitrate_bps=(int(parameters["videoBitrateBps"])
+                               if parameters.get("videoBitrateBps") is not None else None),
+            container=container,
+            audio_codec=parameters.get("audioCodec"),
+            audio_sample_rate_hz=(int(parameters["audioSampleRateHz"])
+                                  if parameters.get("audioSampleRateHz") is not None else None),
+            audio_bitrate_bps=(int(parameters["audioBitrateBps"])
+                               if parameters.get("audioBitrateBps") is not None else None),
         )
 
     if operation == "convert_subtitles":

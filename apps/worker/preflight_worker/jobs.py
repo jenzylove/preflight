@@ -6,8 +6,8 @@ The order here is the safety model made executable.
      against the stored approval, so an approval cannot be replayed against a
      plan the user has not seen.
   2. Fetch the originals from private storage into a temporary workspace.
-  3. Execute only green steps, writing new files. Originals are never opened
-     for writing.
+  3. Execute only approved green steps and the approved technical conform,
+     writing new files. Originals are never opened for writing.
   4. Assemble one package per destination, because destinations that conflict
      cannot share an output.
   5. Validate each package by re-measuring what was actually written.
@@ -26,7 +26,7 @@ from pathlib import Path
 from typing import Any
 
 from preflight_contracts import repairs
-from preflight_contracts.plan import OPERATION_CATALOGUE, Safety
+from preflight_contracts.plan import OPERATION_CATALOGUE, operation_is_executable
 from preflight_contracts.rules import AssetType, RulePack
 from preflight_contracts.state import JobState, PackageState
 
@@ -100,8 +100,8 @@ def process_job(job_id: uuid.UUID, session) -> dict[str, Any]:
     approved_ids = {str(x) for x in (approval.approved_step_ids_json or [])}
     runnable = [
         s for s in steps
-        if s.safety_level == Safety.GREEN.value
-        and (not approved_ids or str(s.id) in approved_ids)
+        if operation_is_executable(s.operation)
+        and str(s.id) in approved_ids
     ]
 
     assets = session.scalars(

@@ -171,6 +171,97 @@ def normalise_loudness(
 
 
 # ---------------------------------------------------------------------------
+# Explicit technical conform
+# ---------------------------------------------------------------------------
+
+def technical_conform(
+    source: Path,
+    output: Path,
+    *,
+    video_codec: str | None = None,
+    video_profile: int | None = None,
+    video_width_px: int | None = None,
+    video_height_px: int | None = None,
+    video_bitrate_bps: int | None = None,
+    container: str | None = None,
+    audio_codec: str | None = None,
+    audio_sample_rate_hz: int | None = None,
+    audio_bitrate_bps: int | None = None,
+) -> RepairResult:
+    """Create one explicitly approved, technically conformed delivery master.
+
+    This is intentionally separate from green repairs: the picture and/or
+    soundtrack may change. The source is opened read-only, a new file is
+    written, and the worker independently measures that file before it can be
+    called a verified package. Channel layout is not a parameter here because
+    a stereo-to-surround conversion is a new mix, not a mechanical conform.
+    """
+    _guard(source, output)
+
+    target_container = (container or output.suffix.lstrip(".")).lower()
+    args = [
+        "ffmpeg", "-y", "-hide_banner", "-nostats", "-i", str(source),
+        "-map", "0:v:0?", "-map", "0:a:0?", "-sn",
+    ]
+
+    if video_codec:
+        if video_codec == "prores":
+            profile = str(video_profile if video_profile is not None else 1)
+            args += ["-c:v", "prores_ks", "-profile:v", profile,
+                     "-pix_fmt", "yuv422p10le"]
+        elif video_codec == "libx264":
+            args += ["-c:v", "libx264", "-preset", "medium", "-pix_fmt", "yuv420p"]
+        else:
+            args += ["-c:v", video_codec]
+    else:
+        args += ["-c:v", "copy"]
+
+    if video_width_px or video_height_px:
+        width = str(video_width_px or -2)
+        height = str(video_height_px or -2)
+        args += ["-vf", f"scale={width}:{height}:flags=lanczos"]
+    if video_bitrate_bps:
+        args += ["-b:v", str(int(video_bitrate_bps))]
+
+    if audio_codec:
+        args += ["-c:a", audio_codec]
+    else:
+        args += ["-c:a", "copy"]
+    if audio_sample_rate_hz:
+        args += ["-ar", str(int(audio_sample_rate_hz))]
+    if audio_bitrate_bps and audio_codec not in {"pcm_s24le", "pcm_s16le"}:
+        args += ["-b:a", str(int(audio_bitrate_bps))]
+    if target_container in {"mov", "mp4"}:
+        args += ["-movflags", "+faststart"]
+
+    args.append(str(output))
+    proc = _run(args)
+    if proc.returncode != 0:
+        raise RepairError(f"technical conform failed: {proc.stderr.strip()[-400:]}")
+
+    return RepairResult(
+        operation="technical_conform",
+        input_path=source,
+        output_path=output,
+        parameters={
+            "videoCodec": video_codec,
+            "videoProfile": video_profile,
+            "videoWidthPx": video_width_px,
+            "videoHeightPx": video_height_px,
+            "videoBitrateBps": video_bitrate_bps,
+            "container": target_container,
+            "audioCodec": audio_codec,
+            "audioSampleRateHz": audio_sample_rate_hz,
+            "audioBitrateBps": audio_bitrate_bps,
+        },
+        input_sha256=sha256_file(source),
+        output_sha256=sha256_file(output),
+        picture_preserved=False,
+        performed_at=_now(),
+    )
+
+
+# ---------------------------------------------------------------------------
 # Container / display metadata
 # ---------------------------------------------------------------------------
 

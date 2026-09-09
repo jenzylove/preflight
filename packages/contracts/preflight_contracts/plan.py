@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any
@@ -25,7 +26,7 @@ from .rules import AssetType
 
 class Safety(str, Enum):
     GREEN = "green"      # deterministic, non-creative, provably non-destructive
-    YELLOW = "yellow"    # can alter quality, timing, framing or meaning
+    YELLOW = "yellow"    # explicit approval; technical conform or human decision
     RED = "red"          # needs authority or craft Preflight does not have
 
 
@@ -87,8 +88,20 @@ OPERATION_CATALOGUE: dict[str, dict[str, Any]] = {
         "seconds_per_minute": 1,
         "explains": "Records a SHA-256 for every file in the package.",
     },
-    # Planned and shown, never executed. Present so the user can see what
-    # would be required and decide for themselves.
+    # This is the one yellow operation Preflight can execute after the user
+    # approves the exact transformation. It writes a new delivery master and
+    # the worker validates that output independently before packaging it.
+    "technical_conform": {
+        "safety": Safety.YELLOW,
+        "input_role": "master",
+        "output_role": "master_technical_conform",
+        "seconds_per_minute": 60,
+        "explains": "Re-encodes one new delivery master to the published video, "
+                    "container and audio targets. The original stays untouched, "
+                    "and the resulting file is independently measured after writing.",
+    },
+    # Planned and shown, never executed. These require creative judgement or
+    # a new asset rather than a deterministic technical conversion.
     "reencode_video": {
         "safety": Safety.YELLOW,
         "input_role": "master",
@@ -114,6 +127,17 @@ OPERATION_CATALOGUE: dict[str, dict[str, Any]] = {
                     "before delivery.",
     },
 }
+
+TECHNICAL_CONFORM_OPERATION = "technical_conform"
+
+
+def operation_is_executable(operation: str) -> bool:
+    """Return whether an approved step may run in the worker."""
+    spec = OPERATION_CATALOGUE.get(operation)
+    return bool(spec and (
+        spec["safety"] is Safety.GREEN
+        or operation == TECHNICAL_CONFORM_OPERATION
+    ))
 
 
 @dataclass(frozen=True)
@@ -159,6 +183,14 @@ class Plan:
     def needs_decision(self) -> list[Step]:
         return [s for s in self.steps if s.safety is Safety.YELLOW]
 
+    @property
+    def technical_conform(self) -> list[Step]:
+        return [s for s in self.steps if s.operation == TECHNICAL_CONFORM_OPERATION]
+
+    @property
+    def executable(self) -> list[Step]:
+        return [s for s in self.steps if operation_is_executable(s.operation)]
+
     def digest(self) -> str:
         """Stable identity of the whole plan.
 
@@ -192,7 +224,7 @@ class Plan:
     def estimated_seconds(self, runtime_seconds: int) -> int:
         minutes = max(1, runtime_seconds / 60)
         total = 0.0
-        for step in self.green:
+        for step in self.executable:
             rate = OPERATION_CATALOGUE[step.operation]["seconds_per_minute"]
             total += rate * minutes
         return int(total) + 5   # fixed overhead for fetch, hash and upload
@@ -203,7 +235,10 @@ class Plan:
         A producer's first question about any automated repair is what it will
         do to the parts they did not ask it to change.
         """
-        touched = {s.input_role for s in self.green}
+        touched = {
+            s.input_role for s in self.steps
+            if s.safety is Safety.GREEN or s.operation == "technical_conform"
+        }
         return sorted(all_roles - touched)
 
 
@@ -276,14 +311,23 @@ def build_plan(
                     "field": f"{assertion.asset_type.value}.{assertion.field_name}",
                     "published": assertion.expected,
                     "measured": assertion.measured,
-                    "reason": "No supported operation satisfies this requirement.",
+                    "reason": assertion.explanation
+                              or "No supported operation satisfies this requirement.",
                     "safety": Safety.RED.value,
                 })
                 continue
 
             spec = OPERATION_CATALOGUE[operation]
+            related = [
+                candidate for candidate in assertions
+                if candidate.result not in {
+                    Result.PASS, Result.NOT_APPLICABLE, Result.AMBIGUOUS,
+                    Result.NOT_MEASURED, Result.UNSUPPORTED,
+                }
+                and (candidate.repair_operation or _yellow_operation(candidate)) == operation
+            ] or [assertion]
             parameters = _parameters_for(
-                operation, assertion, destination_id, loudness_targets
+                operation, assertion, destination_id, loudness_targets, related
             )
 
             if operation == "convert_subtitles" and not parameters.get("targetFormat"):
@@ -346,10 +390,14 @@ def build_plan(
 def _yellow_operation(assertion: Assertion) -> str | None:
     if assertion.result is not Result.REVIEW_REQUIRED:
         return None
+    if (assertion.asset_type, assertion.field_name) in TECHNICAL_CONFORM_FIELDS:
+        return "technical_conform"
+    if assertion.asset_type is AssetType.AUDIO and assertion.field_name == "channels":
+        # A channel layout is a mix, not a signal conversion. Keep it in the
+        # human/new-asset bucket instead of manufacturing surround channels.
+        return None
     if assertion.asset_type is AssetType.VIDEO:
         return "reencode_video"
-    if assertion.asset_type is AssetType.AUDIO:
-        return "reencode_video"   # audio re-encode rides with the container rebuild
     if assertion.asset_type is AssetType.POSTER:
         return "crop_poster"
     if assertion.asset_type is AssetType.SUBTITLE:
@@ -394,6 +442,7 @@ def _parameters_for(
     assertion: Assertion,
     destination_id: str,
     loudness_targets: dict[str, tuple[float, float]],
+    related_assertions: list[Assertion] | None = None,
 ) -> dict[str, Any]:
     if operation == "normalise_loudness":
         window = loudness_targets.get(destination_id)
@@ -401,9 +450,15 @@ def _parameters_for(
         return {"targetLufs": target, "truePeakDbtp": -3.0, "mode": "linear"}
 
     if operation == "rewrite_container_metadata":
-        # Every metadata correction for one destination is one step, so the
-        # container is rebuilt once rather than once per failing flag.
-        return {"destination": destination_id, "corrects": "display_and_colour_signalling"}
+        # Every metadata correction for one destination is one step, and every
+        # value comes from the failing assertion rather than a generic default.
+        return _metadata_parameters(related_assertions or [assertion])
+
+    if operation == "technical_conform":
+        # Video/container/audio conversions are one coherent conform. This is
+        # deliberate: five independent re-encodes would compound quality loss
+        # and could never be described as one explicit user approval.
+        return _technical_conform_parameters(related_assertions or [assertion])
 
     if operation == "convert_subtitles":
         target = _subtitle_target(assertion.expected)
@@ -415,17 +470,166 @@ def _parameters_for(
     return {"destination": destination_id}
 
 
+# Fields that can be addressed by one exact ffmpeg conform. Channel layout is
+# intentionally absent: a stereo-to-5.1 conversion requires a real mix.
+TECHNICAL_CONFORM_FIELDS: set[tuple[AssetType, str]] = {
+    (AssetType.VIDEO, "codec"),
+    (AssetType.VIDEO, "container"),
+    (AssetType.VIDEO, "profile"),
+    (AssetType.VIDEO, "widthPx"),
+    (AssetType.VIDEO, "heightPx"),
+    (AssetType.VIDEO, "bitrateBps"),
+    (AssetType.AUDIO, "codec"),
+    (AssetType.AUDIO, "sampleRateHz"),
+    (AssetType.AUDIO, "bitrateBps"),
+}
+
+
+def _expected_options(expected: str) -> list[str]:
+    text = expected.strip()
+    lowered = text.lower()
+    for prefix in ("eq ", "one of ", "in "):
+        if lowered.startswith(prefix):
+            return [item.strip() for item in text[len(prefix):].split(",") if item.strip()]
+    return []
+
+
+def _exact_expected(expected: str) -> str | None:
+    options = _expected_options(expected)
+    return options[0] if options else None
+
+
+def _numeric_target(expected: str) -> int | float | None:
+    numbers = [
+        float(value.replace("_", ""))
+        for value in re.findall(r"-?[\d_]+(?:\.\d+)?", expected)
+    ]
+    if not numbers:
+        return None
+    if expected.strip().lower().startswith("between") and len(numbers) >= 2:
+        value = (numbers[0] + numbers[1]) / 2
+    else:
+        value = numbers[0]
+    return int(value) if value.is_integer() else round(value, 3)
+
+
+def _normalised(value: str) -> str:
+    return re.sub(r"[\s._-]+", "", value.lower())
+
+
+def _codec_target(expected: str, asset_type: AssetType) -> str | None:
+    options = _expected_options(expected)
+    if not options:
+        return None
+    normalised = [_normalised(option) for option in options]
+    if asset_type is AssetType.VIDEO:
+        if any(
+            value in {"proreslt", "prores"} or value.startswith("prores")
+            for value in normalised
+        ):
+            return "prores"
+        if any(value in {"h264", "avc", "avc1"} for value in normalised):
+            return "libx264"
+        return options[0].lower()
+    if any(value in {"pcm", "lpcm", "pcms24le"} for value in normalised):
+        return "pcm_s24le"
+    if any(value == "aac" or value.startswith("aac") for value in normalised):
+        return "aac"
+    if any(value == "ac3" for value in normalised):
+        return "ac3"
+    return options[0].lower()
+
+
+def _profile_target(expected: str) -> int | None:
+    value = _normalised(_exact_expected(expected) or "")
+    return {"proxy": 0, "lt": 1, "standard": 2, "hq": 3,
+            "4444": 4, "4444xq": 5}.get(value)
+
+
+def _metadata_parameters(assertions: list[Assertion]) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+    for assertion in assertions:
+        value = _exact_expected(assertion.expected)
+        if assertion.field_name == "displayAspectRatio" and value:
+            params["displayAspectRatio"] = value
+        elif assertion.field_name == "colourPrimaries" and value:
+            params["colourPrimaries"] = value.lower()
+        elif assertion.field_name == "colourTransfer" and value:
+            params["colourTransfer"] = value.lower()
+        elif assertion.field_name == "colourMatrix" and value:
+            params["colourMatrix"] = value.lower()
+        elif assertion.field_name == "fastStart" and value:
+            params["fastStart"] = value.lower() == "true"
+    return params
+
+
+def _technical_conform_parameters(assertions: list[Assertion]) -> dict[str, Any]:
+    params: dict[str, Any] = {}
+    for assertion in assertions:
+        field = assertion.field_name
+        if assertion.asset_type is AssetType.VIDEO and field == "codec":
+            target = _codec_target(assertion.expected, AssetType.VIDEO)
+            if target:
+                params["videoCodec"] = target
+                option = _normalised(_exact_expected(assertion.expected) or "")
+                if option == "proreslt" or option == "lt":
+                    params["videoProfile"] = 1
+        elif assertion.asset_type is AssetType.VIDEO and field == "profile":
+            target = _profile_target(assertion.expected)
+            if target is not None:
+                params["videoProfile"] = target
+        elif assertion.asset_type is AssetType.VIDEO and field == "container":
+            target = _exact_expected(assertion.expected)
+            if target:
+                params["container"] = target.lower().lstrip(".")
+        elif assertion.asset_type is AssetType.VIDEO and field == "widthPx":
+            target = _numeric_target(assertion.expected)
+            if target is not None:
+                params["videoWidthPx"] = int(target)
+        elif assertion.asset_type is AssetType.VIDEO and field == "heightPx":
+            target = _numeric_target(assertion.expected)
+            if target is not None:
+                params["videoHeightPx"] = int(target)
+        elif assertion.asset_type is AssetType.VIDEO and field == "bitrateBps":
+            target = _numeric_target(assertion.expected)
+            if target is not None:
+                params["videoBitrateBps"] = int(target)
+        elif assertion.asset_type is AssetType.AUDIO and field == "codec":
+            target = _codec_target(assertion.expected, AssetType.AUDIO)
+            if target:
+                params["audioCodec"] = target
+        elif assertion.asset_type is AssetType.AUDIO and field == "sampleRateHz":
+            target = _numeric_target(assertion.expected)
+            if target is not None:
+                params["audioSampleRateHz"] = int(target)
+        elif assertion.asset_type is AssetType.AUDIO and field == "bitrateBps":
+            target = _numeric_target(assertion.expected)
+            if target is not None:
+                params["audioBitrateBps"] = int(target)
+    if params.get("container") is None and (
+        params.get("videoCodec") == "prores" or params.get("audioCodec") == "pcm_s24le"
+    ):
+        # These delivery codecs are carried in QuickTime more reliably than
+        # MP4. This is a container consequence of the requested conform, not a
+        # hidden change to the published requirement.
+        params["container"] = "mov"
+    return params
+
+
 #: Metadata rewrite must follow loudness normalisation, because normalisation
 #: produces the file whose container is then corrected.
 _AFTER: dict[str, set[str]] = {
-    "rewrite_container_metadata": {"normalise_loudness"},
+    "technical_conform": {"normalise_loudness"},
+    "rewrite_container_metadata": {"normalise_loudness", "technical_conform"},
     "build_manifest": {
         "normalise_loudness", "rewrite_container_metadata",
+        "technical_conform",
         "convert_subtitles", "resize_poster", "normalise_metadata",
         "rename_and_layout",
     },
     "rename_and_layout": {
         "normalise_loudness", "rewrite_container_metadata",
+        "technical_conform",
         "convert_subtitles", "resize_poster", "normalise_metadata",
     },
 }

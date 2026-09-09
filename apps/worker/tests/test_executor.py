@@ -84,6 +84,35 @@ class TestApprovalEnforcement:
         assert outcome.status == "REFUSED"
         assert "yellow" in outcome.error
 
+    def test_an_approved_technical_conform_is_executed_and_remeasurable(self, master, tmp_path):
+        from preflight_contracts.inspect_media import inspect_audio, inspect_video
+
+        before = repairs.sha256_file(master)
+        outcome = execute_step(
+            step(
+                "technical_conform",
+                container="mov",
+                videoCodec="prores",
+                videoProfile=1,
+                videoBitrateBps=25_000_000,
+                audioCodec="pcm_s24le",
+                audioSampleRateHz=48_000,
+            ),
+            inputs={"master": master}, work_dir=tmp_path,
+            plan_digest=PLAN, approved_digest=PLAN,
+        )
+        assert outcome.status == "SUCCEEDED"
+        assert outcome.output_path.suffix == ".mov"
+        assert repairs.sha256_file(master) == before
+
+        video = inspect_video(outcome.output_path).properties
+        audio = inspect_audio(outcome.output_path).properties
+        assert video["container"] == "mov"
+        assert video["codec"] == "prores"
+        assert str(video["profile"]).lower() == "lt"
+        assert audio["codec"] == "pcm_s24le"
+        assert audio["sampleRateHz"] == 48_000
+
     def test_an_uncatalogued_operation_is_refused(self, master, tmp_path):
         outcome = execute_step(
             step("delete_everything"),

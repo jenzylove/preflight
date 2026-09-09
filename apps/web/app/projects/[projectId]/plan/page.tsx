@@ -43,6 +43,12 @@ type UserTask = {
   why: string;
   sources: FindingSource[];
 };
+type TechnicalConform = {
+  key: string;
+  destination: string;
+  steps: PlanStep[];
+  lines: string[];
+};
 
 export default function PlanPage({
   params,
@@ -92,18 +98,22 @@ function PlanView({ projectId }: { projectId: string }) {
     return () => { if (polling.current) clearInterval(polling.current); };
   }, [job, projectId]);
 
-  async function applySafeFixes() {
+  async function approveAndExecute() {
     const plan = run?.plan;
     if (!plan?.plan_id) return;
     setBusy(true);
     setError(null);
     try {
-      await api.approvePlan(projectId, plan.plan_id, plan.digest, safeFixes.flatMap((fix) => fix.steps.map((step) => step.step_id)));
+      const stepIds = [
+        ...safeFixes.flatMap((fix) => fix.steps.map((step) => step.step_id)),
+        ...technicalConforms.flatMap((fix) => fix.steps.map((step) => step.step_id)),
+      ];
+      await api.approvePlan(projectId, plan.plan_id, plan.digest, stepIds);
       setApproved(true);
       const started = await api.executePlan(projectId, plan.plan_id);
       setJob(await api.jobStatus(projectId, started.job_id));
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "The safe fixes did not start.");
+      setError(caught instanceof Error ? caught.message : "The approved fixes did not start.");
     } finally { setBusy(false); }
   }
 
@@ -113,40 +123,45 @@ function PlanView({ projectId }: { projectId: string }) {
 
   const tasks = buildTasks(plan, run!, rules, names, projectId);
   const safeFixes = buildSafeFixes(plan, run!, rules, names);
+  const technicalConforms = buildTechnicalConforms(plan, run!, rules, names);
   const finished = job?.state === "SUCCEEDED";
 
   return (
     <>
       <ProjectRail project={project} />
       <div className="mb-8">
-        <h2 className="font-display text-2xl text-paper-000">Make the fixes that are safe to automate.</h2>
-        <p className="mt-3 max-w-measure text-[15px] leading-relaxed text-paper-300">Preflight keeps your original film untouched. It will make only the deterministic fixes below, then check the new package again.</p>
+        <h2 className="font-display text-2xl text-paper-000">Finish the delivery.</h2>
+        <p className="mt-3 max-w-measure text-[15px] leading-relaxed text-paper-300">Review the safe fixes and any technical conform. Your original film stays untouched, and the result is checked again from the files Preflight writes.</p>
       </div>
 
       {job ? (
-        <Processing job={job} steps={plan.steps} projectId={projectId} finished={finished} />
+        <Processing job={job} projectId={projectId} finished={finished} />
       ) : (
         <>
           {safeFixes.length > 0 && (
             <section className="rounded-[3px] border border-line bg-ink-100 px-6 py-5">
-              <h3 className="text-[15px] font-medium text-paper-000">Preflight can fix <span className="ml-2 font-normal text-paper-400">{safeFixes.length}</span></h3>
+              <h3 className="text-[15px] font-medium text-paper-000">Preflight will fix <span className="ml-2 font-normal text-paper-400">{safeFixes.length}</span></h3>
               <ul className="mt-4 space-y-2">{safeFixes.map((fix) => <li key={fix.key}><SafeFixRow fix={fix} /></li>)}</ul>
-              <div className="mt-6 border-t border-line pt-5">
-                <button type="button" onClick={applySafeFixes} disabled={busy || approved} className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium text-ink-000 transition hover:bg-white disabled:opacity-50">
-                  {busy ? "Starting…" : `Apply ${safeFixes.length} safe fix${safeFixes.length === 1 ? "" : "es"}`}
-                </button>
-              </div>
+              {technicalConforms.length === 0 && <div className="mt-6 border-t border-line pt-5"><button type="button" onClick={approveAndExecute} disabled={busy || approved} className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium text-ink-000 transition hover:bg-white disabled:opacity-50">{busy ? "Starting…" : `Apply ${safeFixes.length} safe fix${safeFixes.length === 1 ? "" : "es"}`}</button></div>}
+            </section>
+          )}
+
+          {technicalConforms.length > 0 && (
+            <section className="mt-8 rounded-[3px] border border-line bg-ink-100 px-6 py-5">
+              <h3 className="text-[15px] font-medium text-paper-000">Approve technical conform <span className="ml-2 font-normal text-paper-400">{technicalConforms.length}</span></h3>
+              <ul className="mt-4 space-y-3">{technicalConforms.map((conform) => <li key={conform.key}><TechnicalConformCard conform={conform} /></li>)}</ul>
+              <div className="mt-6 border-t border-line pt-5"><button type="button" onClick={approveAndExecute} disabled={busy || approved} className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium text-ink-000 transition hover:bg-white disabled:opacity-50">{busy ? "Starting…" : "Approve technical conform"}</button></div>
             </section>
           )}
 
           {tasks.length > 0 && (
             <section className="mt-8 rounded-[3px] border border-line bg-ink-100 px-6 py-5">
-              <h3 className="text-[15px] font-medium text-paper-000">You need to do <span className="ml-2 font-normal text-paper-400">{tasks.length}</span></h3>
+              <h3 className="text-[15px] font-medium text-paper-000">You need to provide <span className="ml-2 font-normal text-paper-400">{tasks.length}</span></h3>
               <ul className="mt-4 space-y-3">{tasks.map((task) => <li key={task.key}><UserTaskCard task={task} /></li>)}</ul>
             </section>
           )}
 
-          {(safeFixes.length > 0 || tasks.length > 0) && <TechnicalDetails plan={plan} tasks={tasks} />}
+          {(safeFixes.length > 0 || technicalConforms.length > 0 || tasks.length > 0) && <TechnicalDetails plan={plan} tasks={tasks} />}
         </>
       )}
       {error && <p role="alert" className="mt-6 border-l-2 border-stop bg-stop-bg/40 py-3 pl-4 text-paper-100">{error}</p>}
@@ -187,6 +202,81 @@ function SafeFixRow({ fix }: { fix: SafeFix }) {
   return <div className="rounded-[3px] bg-ink-000/45 px-4 py-3"><h4 className="text-sm font-medium text-paper-000">{fix.label}</h4><p className="mt-1 text-sm text-paper-300">{fix.summary}</p></div>;
 }
 
+function buildTechnicalConforms(plan: Plan, run: PreflightRun, rules: Rule[], names: Record<string, string>): TechnicalConform[] {
+  const grouped = new Map<string, TechnicalConform>();
+  for (const step of plan.needs_your_decision.filter((item) => item.operation === "technical_conform")) {
+    const key = `conform:${step.output}`;
+    const current = grouped.get(key);
+    if (current) {
+      current.steps.push(step);
+      continue;
+    }
+    const destination = step.resolves
+      .map((ruleId) => findingForRule(ruleId, run, rules, names))
+      .find((finding): finding is Finding => Boolean(finding))?.destination
+      ?? "the destination";
+    grouped.set(key, {
+      key,
+      destination,
+      steps: [step],
+      lines: technicalConformLines(step, run, rules, names),
+    });
+  }
+  return [...grouped.values()];
+}
+
+function technicalConformLines(step: PlanStep, run: PreflightRun, rules: Rule[], names: Record<string, string>): string[] {
+  const findings = step.resolves
+    .map((ruleId) => findingForRule(ruleId, run, rules, names))
+    .filter((finding): finding is Finding => Boolean(finding));
+  const byField = (field: string) => findings.find((finding) => finding.field === field);
+  const lines: string[] = [];
+  const codec = byField("codec");
+  const container = byField("container");
+  const videoBitrate = findings.find((finding) => finding.assetType === "video" && finding.field === "bitrateBps");
+  const audioBitrate = findings.find((finding) => finding.assetType === "audio" && finding.field === "bitrateBps");
+  const sampleRate = findings.find((finding) => finding.assetType === "audio" && finding.field === "sampleRateHz");
+  const audioCodec = findings.find((finding) => finding.assetType === "audio" && finding.field === "codec");
+
+  if (codec && codec.assetType === "video") {
+    const target = step.parameters.videoCodec === "prores" && step.parameters.videoProfile === 1
+      ? "ProRes LT"
+      : expectedDisplay(codec);
+    lines.push(`${formatValue(codec.assertion?.measured, codec.field)} → ${target}`);
+  }
+  if (container) lines.push(`${formatValue(container.assertion?.measured, container.field)} → ${expectedDisplay(container)}`);
+  if (audioCodec || sampleRate) {
+    const currentCodec = audioCodec ? formatValue(audioCodec.assertion?.measured, audioCodec.field) : null;
+    const currentRate = sampleRate ? formatValue(sampleRate.assertion?.measured, sampleRate.field) : null;
+    const targetCodec = step.parameters.audioCodec === "pcm_s24le" ? "PCM" : (audioCodec ? expectedDisplay(audioCodec) : null);
+    const targetRate = step.parameters.audioSampleRateHz ? formatValue(step.parameters.audioSampleRateHz, "sampleRateHz") : null;
+    lines.push(`${[currentCodec, currentRate].filter(Boolean).join(" ")} → ${[targetCodec, targetRate].filter(Boolean).join(" ")}`);
+  }
+  if (videoBitrate) lines.push(`Video bitrate → ${expectedDisplay(videoBitrate)}`);
+  if (audioBitrate) lines.push(`Audio bitrate → ${expectedDisplay(audioBitrate)}`);
+  if (findings.length === 0) lines.push("The published technical delivery targets");
+  return [...new Set(lines)];
+}
+
+function expectedDisplay(finding: Finding): string {
+  const expected = finding.rule?.expected ?? finding.assertion?.published ?? "the published target";
+  const operator = finding.rule?.operator;
+  if (operator === "between") {
+    const values = [...expected.matchAll(/-?\d+(?:\.\d+)?/g)].map((match) => Number(match[0]));
+    if (values.length >= 2) return `${formatValue(values[0], finding.field)}–${formatValue(values[1], finding.field)}`;
+  }
+  if (operator === "gte" || operator === "lte" || operator === "eq") {
+    const value = expected.replace(/^(?:gte|lte|eq)\s+/i, "");
+    const numeric = Number(value);
+    return Number.isNaN(numeric) ? formatValue(value, finding.field) : formatValue(numeric, finding.field);
+  }
+  return formatValue(expected, finding.field);
+}
+
+function TechnicalConformCard({ conform }: { conform: TechnicalConform }) {
+  return <div className="rounded-[3px] bg-ink-000/45 px-4 py-4"><h4 className="text-sm font-medium text-paper-000">Prepare a {conform.destination}-compatible video</h4><ul className="mt-2 space-y-1 text-sm text-paper-200">{conform.lines.map((line) => <li key={line}>{line}</li>)}</ul><p className="mt-3 text-sm text-paper-300">This re-encodes the film. Your original remains untouched.</p></div>;
+}
+
 function buildTasks(plan: Plan, run: PreflightRun, rules: Rule[], names: Record<string, string>, projectId: string): UserTask[] {
   const grouped = new Map<string, FindingSource[]>();
   const add = (source: FindingSource) => {
@@ -195,6 +285,7 @@ function buildTasks(plan: Plan, run: PreflightRun, rules: Rule[], names: Record<
   };
   for (const entry of [...plan.blocked, ...plan.unresolved]) add({ entry, finding: resolveFinding(entry, run, rules, names) });
   for (const step of plan.needs_your_decision) {
+    if (step.operation === "technical_conform") continue;
     for (const ruleId of step.resolves) add({ step, finding: findingForRule(ruleId, run, rules, names) ?? fallbackFinding(step, names) });
   }
   for (const step of plan.steps) {
@@ -224,7 +315,7 @@ function makeTask(key: string, sources: FindingSource[], projectId: string): Use
   const first = firstSource.finding;
   const suspicious = isMisreadFilename(first);
   const action = suspicious ? null : requirementAction(first.assetType, first.field, projectId);
-  const label = suspicious ? "Review filename requirement" : taskLabel(key, action?.label ?? "Resolve requirement");
+  const label = suspicious ? "Review filename requirement" : taskLabel(key, action?.label ?? "Resolve requirement", sources);
   const href = suspicious ? `/projects/${projectId}/preflight#rule-${first.rule?.rule_id ?? ""}` : action!.href;
   const buttonLabel = suspicious ? "Review requirement" : action!.label;
   return {
@@ -240,9 +331,13 @@ function makeTask(key: string, sources: FindingSource[], projectId: string): Use
   };
 }
 
-function taskLabel(key: string, fallback: string): string {
-  if (key === "subtitle-file") return "Add subtitle file";
-  if (key === "audio-mix") return "Replace the audio mix";
+function taskLabel(key: string, fallback: string, sources: FindingSource[]): string {
+  if (key === "subtitle-file") return "Subtitle file needed";
+  if (key === "audio-mix") {
+    const channels = sources.find(({ finding }) => finding.field === "channels");
+    const expected = channels ? expectedDisplay(channels.finding) : "new";
+    return expected === "not measured" ? "New audio mix needed" : `${expected.replace(/ channels?$/, "-channel")} audio mix needed`;
+  }
   if (key === "video-export") return "Export the required video version";
   if (key === "burned-in-subtitles") return "Add burned-in subtitles";
   return fallback;
@@ -253,15 +348,19 @@ function taskSummary(key: string, sources: FindingSource[]): string {
   if (!firstSource) return "This requirement needs your attention.";
   const first = firstSource.finding;
   const destination = first.destination;
-  const values = sources.map(({ finding }) => finding.rule?.expected ?? finding.assertion?.published ?? "the published requirement");
-  const expected = unique(values.map((value) => formatValue(value, first.field))).join(" or ");
+  const expected = unique(sources.map(({ finding }) => expectedDisplay(finding))).join(" or ");
   const measured = first.assertion?.measured;
-  if (key === "subtitle-file") return `No separate subtitle file was provided. ${destination} requires ${expected}.`;
+  if (key === "subtitle-file") {
+    const hasSidecarFormat = sources.some(({ finding }) => /srt|vtt/i.test(String(finding.rule?.expected ?? finding.assertion?.published ?? "")));
+    return hasSidecarFormat
+      ? `${destination} requires a separate SRT or VTT subtitle file. None was supplied.`
+      : `${destination} requires a separate subtitle file. None was supplied.`;
+  }
   if (key === "audio-mix") return `Your film is ${formatValue(measured, first.field)}. ${destination} requires ${expected}.`;
   if (key === "video-export") return `Your film is ${formatValue(measured, first.field)}. ${destination} requires ${expected}.`;
   if (key === "burned-in-subtitles") return `${destination} requires subtitles to be visible in the picture itself.`;
   if (key.startsWith("review:")) return "The source may describe a naming convention, not a filename pattern.";
-  return `${requirementSentence(destination, first.assetType, first.field, first.rule?.operator ?? "eq", first.rule?.expected ?? first.assertion?.published ?? "required")} ${measured == null ? "Preflight could not measure this on the files supplied." : `Your file currently has ${formatValue(measured, first.field)}.`}`;
+  return `${requirementSentence(destination, first.assetType, first.field, first.rule?.operator ?? "eq", expectedDisplay(first))} ${measured == null ? "Preflight could not measure this on the files supplied." : `Your file currently has ${formatValue(measured, first.field)}.`}`;
 }
 
 function UserTaskCard({ task }: { task: UserTask }) {
@@ -305,7 +404,7 @@ function unique(values: string[]): string[] {
   return [...new Set(values.filter(Boolean))];
 }
 
-function Processing({ job, steps, projectId, finished }: { job: JobStatus; steps: PlanStep[]; projectId: string; finished: boolean }) {
+function Processing({ job, projectId, finished }: { job: JobStatus; projectId: string; finished: boolean }) {
   const failed = job.state === "FAILED" || job.state === "CANCELLED";
-  return <section className="rounded-[3px] border border-line bg-ink-100 p-6"><div className="flex flex-wrap items-baseline justify-between gap-3"><h3 className="font-display text-lg text-paper-000">{finished ? `${steps.length} safe fix${steps.length === 1 ? "" : "es"} completed` : failed ? "Processing stopped" : "Applying safe fixes"}</h3><StatusChip tone={finished ? "ok" : failed ? "stop" : "think"}>{job.state.toLowerCase()}</StatusChip></div><p className="mt-3 max-w-measure text-sm leading-relaxed text-paper-300">{finished ? "Safe fixes completed. Preflight rechecked the new files." : job.message}</p>{!finished && !failed && <Working label="Applying the safe fixes to a copy of your film" />}{finished && <Link href={`/projects/${projectId}/packages`} className="mt-5 inline-flex rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium text-ink-000 transition hover:bg-white">See recheck result</Link>}{failed && <p className="mt-4 border-l-2 border-stop bg-stop-bg/30 py-3 pl-4 text-sm text-paper-100">Your original files are untouched. Nothing was marked ready.</p>}</section>;
+  return <section className="rounded-[3px] border border-line bg-ink-100 p-6"><div className="flex flex-wrap items-baseline justify-between gap-3"><h3 className="font-display text-lg text-paper-000">{finished ? "Processing completed" : failed ? "Processing stopped" : "Preparing your delivery"}</h3><StatusChip tone={finished ? "ok" : failed ? "stop" : "think"}>{job.state.toLowerCase()}</StatusChip></div><p className="mt-3 max-w-measure text-sm leading-relaxed text-paper-300">{finished ? "Safe fixes completed. Preflight rechecked the new files." : job.message}</p>{!finished && !failed && <Working label="Preparing a new delivery file from your original" />}{finished && <Link href={`/projects/${projectId}/packages`} className="mt-5 inline-flex rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium text-ink-000 transition hover:bg-white">See recheck result</Link>}{failed && <p className="mt-4 border-l-2 border-stop bg-stop-bg/30 py-3 pl-4 text-sm text-paper-100">Your original files are untouched. Nothing was marked ready.</p>}</section>;
 }

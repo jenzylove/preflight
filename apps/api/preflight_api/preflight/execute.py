@@ -21,7 +21,7 @@ import logging
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from preflight_contracts.plan import Safety
+from preflight_contracts.plan import operation_is_executable
 from preflight_contracts.state import (
     JobState,
     ProjectState,
@@ -99,11 +99,15 @@ def execute_plan(
         select(RepairStep).where(RepairStep.repair_plan_id == plan_row.id)
     ).all()
 
-    runnable = [s for s in steps if s.safety_level == Safety.GREEN.value]
+    approved_ids = {str(x) for x in (approval.approved_step_ids_json or [])}
+    runnable = [
+        s for s in steps
+        if str(s.id) in approved_ids and operation_is_executable(s.operation)
+    ]
     if not runnable:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="This plan contains no operations Preflight will run automatically.",
+            detail="This approval contains no executable safe fix or technical conform.",
         )
 
     key = idempotency_key(plan_row.digest, [str(s.id) for s in runnable])
