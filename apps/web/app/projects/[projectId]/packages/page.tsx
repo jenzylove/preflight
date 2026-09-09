@@ -11,8 +11,6 @@ import {
   fieldLabel,
   formatValue,
   operationDone,
-  requirementAction,
-  requirementSentence,
 } from "@/lib/language";
 import type {
   DeliveryRoom,
@@ -135,116 +133,176 @@ function Packages({ projectId }: { projectId: string }) {
   );
 }
 
-/**
- * One class of unfinished business, in sentences.
- *
- * Each entry says what the destination asks for and what the film currently
- * is. The field path, the comparison result and the exact published value are
- * still available, one disclosure deeper, because they are the evidence.
- */
-function OutstandingGroup({
-  title,
-  blurb,
-  checks,
-  destination,
-  projectId,
-}: {
-  title: string;
-  blurb: string;
+type PackageTask = {
+  key: string;
+  label: string;
+  summary: string;
+  buttonLabel: string;
+  href: string;
   checks: OutstandingCheck[];
-  destination: string;
-  projectId: string;
-}) {
-  if (checks.length === 0) return null;
+};
+
+function buildPackageTasks(
+  checks: OutstandingCheck[],
+  destination: string,
+  projectId: string,
+): PackageTask[] {
+  const grouped = new Map<string, OutstandingCheck[]>();
+  for (const check of checks) {
+    const key = packageTaskKey(check);
+    grouped.set(key, [...(grouped.get(key) ?? []), check]);
+  }
+
+  return [...grouped.entries()].map(([key, groupedChecks]) => ({
+    key,
+    label: packageTaskLabel(key, groupedChecks),
+    summary: packageTaskSummary(key, destination),
+    buttonLabel: key === "delivery-review" || key === "audio-dynamics" ? "Review" : "Resolve",
+    href: packageTaskHref(key, projectId),
+    checks: groupedChecks,
+  }));
+}
+
+function packageTaskKey(check: OutstandingCheck): string {
+  if (check.asset_type === "audio" && check.field === "channels") return "audio-mix";
+  if (
+    check.asset_type === "audio"
+    && ["codec", "sampleRateHz", "bitrateBps"].includes(check.field)
+  ) return "audio-format";
+  if (
+    check.asset_type === "audio"
+    && ["integratedLoudnessLufs", "truePeakDbtp", "loudnessRangeLu"].includes(check.field)
+  ) return "audio-dynamics";
+  if (check.asset_type === "video") return "video-requirements";
+  if (check.asset_type === "subtitle") return "subtitles";
+  if (check.asset_type === "package" && check.result === "AMBIGUOUS") return "delivery-review";
+  if (check.asset_type === "package" || check.asset_type === "metadata") return "delivery-details";
+  return `${check.asset_type}-${check.field}`;
+}
+
+function packageTaskLabel(key: string, checks: OutstandingCheck[]): string {
+  if (key === "audio-mix") return "Audio mix";
+  if (key === "audio-format") return "Audio format";
+  if (key === "audio-dynamics") return "Audio dynamic range";
+  if (key === "video-requirements") return "Video requirements";
+  if (key === "subtitles") return "Subtitles";
+  if (key === "delivery-review") return "Review delivery requirement";
+  if (key === "delivery-details") return "Delivery details";
+  return fieldLabel(checks[0]?.asset_type ?? "file", checks[0]?.field ?? "requirement");
+}
+
+function packageTaskSummary(key: string, destination: string): string {
+  if (key === "audio-mix") return `The prepared file does not yet contain ${destination}’s required channel mix.`;
+  if (key === "audio-format") return `The prepared file does not yet match ${destination}’s accepted audio format.`;
+  if (key === "audio-dynamics") return "This audio requirement needs review before delivery.";
+  if (key === "video-requirements") return "Some video delivery requirements are still unmet.";
+  if (key === "subtitles") return `${destination}’s subtitle requirements are still unmet.`;
+  if (key === "delivery-review") return "A published delivery requirement needs review before this package can be verified.";
+  if (key === "delivery-details") return "Some delivery details still need attention.";
+  return "This requirement still needs attention before delivery.";
+}
+
+function packageTaskHref(key: string, projectId: string): string {
+  if (key === "delivery-details") return `/projects/${projectId}/destinations`;
+  if (key === "delivery-review") return `/projects/${projectId}/preflight`;
+  return `/projects/${projectId}/master#master-upload`;
+}
+
+function PackageTaskCard({ task }: { task: PackageTask }) {
+  return (
+    <li className="rounded-[3px] bg-ink-000/45 px-4 py-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-3">
+        <h5 className="text-sm font-medium text-paper-000">{task.label}</h5>
+        <Link
+          href={task.href}
+          className="rounded-[3px] border border-line-strong px-3.5 py-2 text-sm
+                     text-paper-100 transition hover:bg-ink-200"
+        >
+          {task.buttonLabel}
+        </Link>
+      </div>
+      <p className="mt-2 max-w-measure text-sm leading-relaxed text-paper-200">
+        {task.summary}
+      </p>
+    </li>
+  );
+}
+
+function RemainingChecks({ tasks }: { tasks: PackageTask[] }) {
+  const count = tasks.reduce((total, task) => total + task.checks.length, 0);
+  if (count === 0) return null;
 
   return (
-    <div className="mb-6">
-      <h4 className="text-sm font-medium text-paper-100">
-        {title}
-        <span className="ml-2 font-normal text-paper-400">{checks.length}</span>
-      </h4>
-      <p className="mt-1 max-w-measure text-sm leading-relaxed text-paper-400">
-        {blurb}
-      </p>
-      <ul className="mt-3 space-y-2.5">
-        {checks.map((check, index) => (
-          <li key={`${check.asset_type}.${check.field}-${index}`}
-              className="rounded-[3px] bg-ink-000/40 px-4 py-3">
-            <p className="text-sm font-medium text-paper-000">
-              {fieldLabel(check.asset_type, check.field)}
-            </p>
-            <p className="mt-1 max-w-measure text-sm leading-relaxed text-paper-200">
-              {requirementSentence(
-                destination,
-                check.asset_type,
-                check.field,
-                "eq",
-                check.published,
-              )}{" "}
-              {check.measured ? (
-                <span className="text-paper-300">
-                  Your film is {formatValue(check.measured, check.field)}.
-                </span>
-              ) : (
-                <span className="text-paper-400">
-                  Preflight has not measured this on your files.
-                </span>
-              )}
-            </p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              <div>
-                <h5 className="text-xs uppercase tracking-wide text-paper-500">Why Preflight won’t change it</h5>
-                <p className="mt-1 text-sm leading-relaxed text-paper-300">
-                  {check.result === "UNSUPPORTED"
-                    ? "This needs a creative or professional mastering decision, so Preflight will not change it automatically."
-                    : "Preflight needs the missing file or information before it can check this."}
-                </p>
-              </div>
-              <div>
-                <h5 className="text-xs uppercase tracking-wide text-paper-500">What you need to do</h5>
-                <p className="mt-1 text-sm leading-relaxed text-paper-200">
-                  {requirementAction(check.asset_type, check.field, projectId).instruction}
-                </p>
-                <Link
-                  href={requirementAction(check.asset_type, check.field, projectId).href}
-                  className="mt-3 inline-flex rounded-[3px] border border-line-strong px-3.5 py-2 text-sm text-paper-100 transition hover:bg-ink-200"
-                >
-                  {requirementAction(check.asset_type, check.field, projectId).label}
-                </Link>
-              </div>
-            </div>
+    <details className="mb-5">
+      <summary className="cursor-pointer text-sm text-paper-200 hover:text-paper-000">
+        Remaining checks ({count})
+      </summary>
+      <div className="mt-4 space-y-5">
+        {tasks.map((task) => (
+          <section key={task.key}>
+            <h5 className="text-sm font-medium text-paper-200">
+              {task.label} <span className="font-normal text-paper-400">({task.checks.length})</span>
+            </h5>
+            <ul className="mt-2 space-y-2 border-l border-line pl-4">
+              {task.checks.map((check, index) => (
+                <li key={`${check.asset_type}.${check.field}-${index}`} className="text-xs leading-relaxed">
+                  <p className="font-medium text-paper-200">
+                    {check.asset_type}.{check.field}
+                  </p>
+                  <p className="text-paper-400">
+                    Published: <span className="font-mono text-paper-300">{check.published}</span>
+                    {" · "}
+                    Measured: <span className="font-mono text-paper-300">
+                      {check.measured == null ? "not measured" : formatValue(check.measured, check.field)}
+                    </span>
+                    {" · "}
+                    Result: <span className="font-mono text-paper-300">{check.result}</span>
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
+      </div>
+    </details>
+  );
+}
+
+function PackageContents({ pkg }: { pkg: PackageSummary }) {
+  if (pkg.files.length === 0) return null;
+
+  return (
+    <details className="mb-5">
+      <summary className="cursor-pointer text-sm text-paper-200 hover:text-paper-000">
+        Package contents · {pkg.files.length} file{pkg.files.length === 1 ? "" : "s"}
+      </summary>
+      <ul className="mt-4 space-y-3">
+        {pkg.files.map((file) => (
+          <li key={file.path} className="border-b border-line/60 pb-3 text-sm text-paper-200">
+            <span>{packageFileLabel(file.path)}</span>
             <details className="mt-2">
-              <summary className="cursor-pointer text-xs text-paper-400 transition hover:text-paper-200">
+              <summary className="cursor-pointer text-xs text-paper-400 hover:text-paper-200">
                 Technical details
               </summary>
-              <dl className="mt-2 grid gap-x-8 gap-y-1 border-l border-line pl-3 text-xs sm:grid-cols-2">
-                <div>
-                  <dt className="inline text-paper-400">Field: </dt>
-                  <dd className="inline font-mono text-paper-200">
-                    {check.asset_type}.{check.field}
-                  </dd>
-                </div>
-                <div>
-                  <dt className="inline text-paper-400">Result: </dt>
-                  <dd className="inline font-mono text-paper-200">{check.result}</dd>
-                </div>
-                <div>
-                  <dt className="inline text-paper-400">Published: </dt>
-                  <dd className="inline font-mono text-paper-200">{check.published}</dd>
-                </div>
-                <div>
-                  <dt className="inline text-paper-400">Measured: </dt>
-                  <dd className="inline font-mono text-paper-200">
-                    {check.measured ?? "not measured"}
-                  </dd>
-                </div>
+              <dl className="mt-2 space-y-1 border-l border-line pl-3 text-xs">
+                <Row label="Path" value={file.path} mono />
+                <Row label="sha256" value={file.sha256} mono />
               </dl>
             </details>
           </li>
         ))}
       </ul>
-    </div>
+    </details>
   );
+}
+
+function packageFileLabel(path: string): string {
+  const lower = path.toLowerCase();
+  if (lower.endsWith("manifest.json")) return "Manifest";
+  if (lower.endsWith(".mov") || lower.endsWith(".mp4")) return "Prepared film";
+  if (lower.endsWith(".srt") || lower.endsWith(".vtt")) return "Subtitle file";
+  if (/\.(jpg|jpeg|png)$/.test(lower)) return "Poster";
+  return "Package file";
 }
 
 function PackageCard({
@@ -260,14 +318,8 @@ function PackageCard({
 }) {
   const destinationName = pkg.destination_name || pkg.destination_id;
 
-  // Grouped by what the person has to do, which is the only ordering that
-  // helps. The raw result enums stay under technical details.
-  const decisions = pkg.outstanding.filter((c) => c.result === "REVIEW_REQUIRED");
-  const missing = pkg.outstanding.filter(
-    (c) => c.result === "NOT_MEASURED" || c.result === "AMBIGUOUS",
-  );
-  const external = pkg.outstanding.filter((c) => c.result === "UNSUPPORTED");
   const fixed = pkg.transformations;
+  const tasks = buildPackageTasks(pkg.outstanding, destinationName, projectId);
   const checksSummary = pkg.checks_total > 0
     ? `${pkg.checks_passed} of ${pkg.checks_total} required checks pass`
     : pkg.requirements_satisfied;
@@ -314,70 +366,38 @@ function PackageCard({
       </header>
 
       <div className="px-5 py-5">
-        <OutstandingGroup
-          title="Needs your decision"
-          blurb="Changes to the film itself. Preflight will not make these for you."
-          checks={decisions}
-          destination={destinationName}
-          projectId={projectId}
-        />
-        <OutstandingGroup
-          title="Needs information or files from you"
-          blurb="Preflight could not check these because it was not given what it needs."
-          checks={missing}
-          destination={destinationName}
-          projectId={projectId}
-        />
-        <OutstandingGroup
-          title="Must be handled outside Preflight"
-          blurb="No safe operation exists for these, so they need work elsewhere."
-          checks={external}
-          destination={destinationName}
-          projectId={projectId}
-        />
-
         {fixed.length > 0 && (
-          <div className="mb-5">
-            <h4 className="text-sm font-medium text-paper-100">Already fixed</h4>
-            <ul className="mt-2 space-y-1.5">
-              {fixed.map((t, index) => (
-                <li key={index} className="text-sm text-paper-300">
-                  {operationDone(t.operation)}
-                  {t.picture_preserved === true && (
-                    <span className="text-paper-400">
-                      {" "}
-                      — your picture is bit-identical to the original
-                    </span>
-                  )}
-                </li>
+          <section className="mb-8 rounded-[3px] border border-line bg-ink-000/35 px-4 py-4">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h4 className="text-sm font-medium text-paper-000">What Preflight changed</h4>
+              <span className="text-sm text-paper-400">
+                {fixed.length} change{fixed.length === 1 ? "" : "s"} made
+              </span>
+            </div>
+            <ul className="mt-3 space-y-1.5 text-sm text-paper-200">
+              {fixed.map((transformation, index) => (
+                <li key={index}>• {operationDone(transformation.operation)}</li>
               ))}
             </ul>
-          </div>
+          </section>
         )}
 
-        {pkg.files.length > 0 && (
-          <div className="mb-5">
-            <h4 className="slate mb-2 text-paper-400">
-              {pkg.files.length} file{pkg.files.length === 1 ? "" : "s"}
-            </h4>
-            <ul className="space-y-1">
-              {pkg.files.map((file) => (
-                <li
-                  key={file.path}
-                  className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-0.5
-                             border-b border-line/60 pb-1"
-                >
-                  <span className="font-mono text-[13px] text-paper-100">
-                    {file.path}
-                  </span>
-                  <span className="font-mono text-[11px] text-paper-500">
-                    {file.sha256.slice(0, 16)}…
-                  </span>
-                </li>
-              ))}
+        {tasks.length > 0 && (
+          <section className="mb-8">
+            <div className="flex flex-wrap items-baseline justify-between gap-3">
+              <h4 className="text-sm font-medium text-paper-000">What still blocks delivery</h4>
+              <span className="text-sm text-paper-400">
+                {tasks.length} thing{tasks.length === 1 ? "" : "s"} still need attention
+              </span>
+            </div>
+            <ul className="mt-3 space-y-3">
+              {tasks.map((task) => <PackageTaskCard key={task.key} task={task} />)}
             </ul>
-          </div>
+          </section>
         )}
+
+        <RemainingChecks tasks={tasks} />
+        <PackageContents pkg={pkg} />
 
         {pkg.limitations.length > 0 && (
           <details className="mb-5">
@@ -393,6 +413,29 @@ function PackageCard({
             </ul>
           </details>
         )}
+
+        <details className="mb-5">
+          <summary className="cursor-pointer text-sm text-paper-200 hover:text-paper-000">
+            Technical details
+          </summary>
+          <div className="mt-4 space-y-4 border-l border-line pl-4 text-xs">
+            <h5 className="text-sm font-medium text-paper-200">Transformations</h5>
+            {fixed.length === 0 && <p className="text-paper-400">No transformations recorded.</p>}
+            {fixed.map((transformation, index) => (
+              <div key={index}>
+                <p className="font-mono text-paper-200">{transformation.operation}</p>
+                <dl className="mt-2 space-y-1">
+                  <Row label="Input sha256" value={transformation.input_sha256} mono />
+                  <Row label="Output sha256" value={transformation.output_sha256} mono />
+                  <Row label="Picture preserved" value={transformation.picture_preserved == null ? null : String(transformation.picture_preserved)} />
+                </dl>
+                <pre className="mt-2 overflow-x-auto whitespace-pre-wrap font-mono text-[11px] leading-relaxed text-paper-400">
+                  {JSON.stringify(transformation.parameters, null, 2)}
+                </pre>
+              </div>
+            ))}
+          </div>
+        </details>
 
         <details className="mb-5">
           <summary className="cursor-pointer text-xs text-paper-400 hover:text-paper-200">

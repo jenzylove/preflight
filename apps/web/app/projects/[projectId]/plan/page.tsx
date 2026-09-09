@@ -65,7 +65,6 @@ function PlanView({ projectId }: { projectId: string }) {
   const [rules, setRules] = useState<Rule[]>([]);
   const [names, setNames] = useState<Record<string, string>>({});
   const [job, setJob] = useState<JobStatus | null>(null);
-  const [approved, setApproved] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const polling = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -98,18 +97,13 @@ function PlanView({ projectId }: { projectId: string }) {
     return () => { if (polling.current) clearInterval(polling.current); };
   }, [job, projectId]);
 
-  async function approveAndExecute() {
+  async function approveAndExecute(stepIds: string[]) {
     const plan = run?.plan;
-    if (!plan?.plan_id) return;
+    if (!plan?.plan_id || stepIds.length === 0) return;
     setBusy(true);
     setError(null);
     try {
-      const stepIds = [
-        ...safeFixes.flatMap((fix) => fix.steps.map((step) => step.step_id)),
-        ...technicalConforms.flatMap((fix) => fix.steps.map((step) => step.step_id)),
-      ];
       await api.approvePlan(projectId, plan.plan_id, plan.digest, stepIds);
-      setApproved(true);
       const started = await api.executePlan(projectId, plan.plan_id);
       setJob(await api.jobStatus(projectId, started.job_id));
     } catch (caught) {
@@ -142,7 +136,7 @@ function PlanView({ projectId }: { projectId: string }) {
             <section className="rounded-[3px] border border-line bg-ink-100 px-6 py-5">
               <h3 className="text-[15px] font-medium text-paper-000">Preflight will fix <span className="ml-2 font-normal text-paper-400">{safeFixes.length}</span></h3>
               <ul className="mt-4 space-y-2">{safeFixes.map((fix) => <li key={fix.key}><SafeFixRow fix={fix} /></li>)}</ul>
-              {technicalConforms.length === 0 && <div className="mt-6 border-t border-line pt-5"><button type="button" onClick={approveAndExecute} disabled={busy || approved} className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium text-ink-000 transition hover:bg-white disabled:opacity-50">{busy ? "Starting…" : `Apply ${safeFixes.length} safe fix${safeFixes.length === 1 ? "" : "es"}`}</button></div>}
+              <div className="mt-6 border-t border-line pt-5"><button type="button" onClick={() => void approveAndExecute(safeFixes.flatMap((fix) => fix.steps.map((step) => step.step_id)))} disabled={busy} className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium text-ink-000 transition hover:bg-white disabled:opacity-50">{busy ? "Starting…" : `Apply ${safeFixes.length} safe fix${safeFixes.length === 1 ? "" : "es"}`}</button></div>
             </section>
           )}
 
@@ -150,7 +144,7 @@ function PlanView({ projectId }: { projectId: string }) {
             <section className="mt-8 rounded-[3px] border border-line bg-ink-100 px-6 py-5">
               <h3 className="text-[15px] font-medium text-paper-000">Approve technical conform <span className="ml-2 font-normal text-paper-400">{technicalConforms.length}</span></h3>
               <ul className="mt-4 space-y-3">{technicalConforms.map((conform) => <li key={conform.key}><TechnicalConformCard conform={conform} /></li>)}</ul>
-              <div className="mt-6 border-t border-line pt-5"><button type="button" onClick={approveAndExecute} disabled={busy || approved} className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium text-ink-000 transition hover:bg-white disabled:opacity-50">{busy ? "Starting…" : "Approve technical conform"}</button></div>
+              <div className="mt-6 border-t border-line pt-5"><button type="button" onClick={() => void approveAndExecute(technicalConforms.flatMap((fix) => fix.steps.map((step) => step.step_id)))} disabled={busy} className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium text-ink-000 transition hover:bg-white disabled:opacity-50">{busy ? "Starting…" : "Approve technical conform"}</button></div>
             </section>
           )}
 
