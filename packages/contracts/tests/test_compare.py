@@ -60,6 +60,13 @@ class TestComparison:
         )
         assert assertion.result is Result.PASS
 
+    def test_gamma_22_matches_ffprobe_bt470m_canonical_value(self):
+        assertion = evaluate(
+            rule("colourTransfer", Operator.EQ, "Gamma 2.2", AssetType.VIDEO),
+            {"colourTransfer": "bt470m"}, "d",
+        )
+        assert assertion.result is Result.PASS
+
 
 class TestAmbiguity:
     def test_conflicting_sources_block_rather_than_guess(self):

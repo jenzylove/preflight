@@ -197,6 +197,7 @@ def _norm(value: Any) -> Any:
             "proreslt": "prores",
             "apple prores lt": "prores",
             "gamma22": "bt470m",
+            "gamma 22": "bt470m",
             "bt470m": "bt470m",
             "subrip": "srt", "webvtt": "vtt",
             "jpg": "jpeg",

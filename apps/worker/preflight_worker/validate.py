@@ -193,6 +193,7 @@ def validate_package(
         a for a in evaluate_pack(pack, measured, ambiguous_rule_ids)
         if a.result is not Result.NOT_APPLICABLE
     ]
+    report.refusals.extend(source_rule_conflicts(pack, report.assertions, measured))
 
     manifest_ok, manifest_problems = verify_manifest(package_dir)
     report.manifest_verified = manifest_ok
@@ -225,6 +226,51 @@ def validate_package(
             report.refusals.append("unsatisfied: " + ", ".join(failing))
 
     return report
+
+
+def source_rule_conflicts(
+    pack: RulePack,
+    assertions: list[Assertion],
+    measured: dict[AssetType, dict],
+) -> list[str]:
+    """Name evidence-bound conflicts the encoder cannot honestly hide.
+
+    Sundance publishes the online image rate as an automatic consequence of
+    the LT codec.  If the measured LT stream falls outside that published
+    window, this is a conflict between the source's codec claim and the
+    encoder/toolchain result—not permission to certify from ``-b:v``.
+    """
+    video = measured.get(AssetType.VIDEO, {})
+    profile = str(video.get("profile") or "").strip().lower()
+    codec = str(video.get("codec") or "").strip().lower()
+    if codec != "prores" or profile != "lt":
+        return []
+
+    conflicts: list[str] = []
+    for assertion in assertions:
+        if (
+            assertion.asset_type is not AssetType.VIDEO
+            or assertion.field_name != "bitrateBps"
+            or assertion.result is Result.PASS
+        ):
+            continue
+        rule = next((r for r in pack.rules if r.rule_id == assertion.rule_id), None)
+        evidence = pack.evidence.get(assertion.source_evidence_id)
+        excerpt = (evidence.quoted_excerpt if evidence else "").lower()
+        if (
+            rule is not None
+            and rule.operator.value == "between"
+            and "as set automatically by lt codec" in excerpt
+        ):
+            measured_bps = video.get("bitrateBps")
+            conflicts.append(
+                "source/toolchain conflict: Sundance describes the 82–102 Mbps "
+                "online image rate as set automatically by the ProRes LT codec, "
+                f"but the measured ProRes LT video stream is {measured_bps} bps; "
+                "the bitrate requirement remains unverified."
+            )
+            break
+    return conflicts
 
 
 def _package_hash(package_dir: Path) -> str | None:

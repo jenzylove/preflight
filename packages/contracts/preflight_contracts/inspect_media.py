@@ -156,7 +156,10 @@ def inspect_video(path: Path) -> Evidence:
         "heightPx": video.get("height"),
         "frameRate": _frame_rate(video),
         "displayAspectRatio": _display_aspect_ratio(video),
-        "bitrateBps": int(fmt["bit_rate"]) if fmt.get("bit_rate") else None,
+        # This is an image/video bitrate rule.  The container bitrate also
+        # includes audio and would make a conform appear faster than the
+        # video stream actually is.
+        "bitrateBps": int(video["bit_rate"]) if video.get("bit_rate") else None,
         "durationSeconds": round(float(fmt["duration"]), 3) if fmt.get("duration") else None,
         "colourPrimaries": video.get("color_primaries"),
         "colourTransfer": video.get("color_transfer"),

@@ -32,6 +32,7 @@ API = "https://preflight-api-584136898465.us-central1.run.app"
 WEB = "https://preflight-web-584136898465.us-central1.run.app"
 
 FIXTURE = ROOT / "packages" / "fixtures" / "malformed"
+SUNDANCE_SLUGS = {"sundance", "sundance-film-festival"}
 
 PASS, FAIL = "PASS", "FAIL"
 results: dict[str, str] = {}
@@ -186,8 +187,11 @@ def main() -> int:
           any(not d.get("available") for d in listed))
 
     requested_slug = os.environ.get("E2E_DESTINATION_SLUG", "").strip()
+    requested_slugs = (
+        SUNDANCE_SLUGS if requested_slug in SUNDANCE_SLUGS else {requested_slug}
+    )
     selected = (
-        [d for d in available if d.get("slug") == requested_slug]
+        [d for d in available if d.get("slug") in requested_slugs]
         if requested_slug else available[:2]
     )
     check("requested destination available", bool(selected), requested_slug or "default set")
@@ -229,7 +233,7 @@ def main() -> int:
     )
     check("assertions carry their source", cited > 0, f"{cited} cited")
 
-    if requested_slug == "sundance":
+    if requested_slug in SUNDANCE_SLUGS:
         status, extracted_rules = request(
             f"{API}/v1/projects/{project_id}/rules", token=token,
         )
@@ -338,6 +342,18 @@ def main() -> int:
          "outstanding": p.get("outstanding")}
         for p in packages
     ], sort_keys=True))
+    limitations = [
+        limitation
+        for package in packages
+        for limitation in package.get("limitations", [])
+    ]
+    if requested_slug in SUNDANCE_SLUGS:
+        print("  validator limitations:", json.dumps(limitations, sort_keys=True))
+        check(
+            "LT bitrate source/toolchain conflict is surfaced",
+            any("source/toolchain conflict" in limitation for limitation in limitations),
+            f"{len(limitations)} limitation(s)",
+        )
     with tempfile.TemporaryDirectory(prefix="preflight-e2e-") as download_dir:
         for package in packages:
             status, intent = request(
