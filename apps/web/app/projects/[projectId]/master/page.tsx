@@ -106,7 +106,9 @@ function Master({ projectId }: { projectId: string }) {
     );
   }
 
-  const master = assets.find((a) => a.role === "master");
+  // A replacement is a new immutable asset. The newest one is the active
+  // input used by the next check; the earlier master remains preserved.
+  const master = [...assets].reverse().find((a) => a.role === "master");
   const extras = SLOTS.filter((s) => !s.required);
 
   return (
@@ -167,7 +169,7 @@ function Master({ projectId }: { projectId: string }) {
                   key={slot.role}
                   projectId={projectId}
                   slot={slot}
-                  asset={assets.find((a) => a.role === slot.role)}
+    asset={[...assets].reverse().find((a) => a.role === slot.role)}
                   onDone={refresh}
                 />
               ))}
@@ -251,6 +253,7 @@ function Slot({
 
   return (
     <section
+      id={`${slot.role}-upload`}
       className={`rounded-[3px] border bg-ink-100 ${
         prominent && !asset ? "border-line-strong p-8" : "border-line p-5"
       }`}
@@ -272,7 +275,7 @@ function Slot({
           </p>
         </div>
 
-        {!asset && phase === "idle" && (
+        {phase === "idle" && (
           <label
             className={`cursor-pointer rounded-[3px] text-sm transition ${
               prominent
@@ -280,7 +283,15 @@ function Slot({
                 : "border border-line-strong px-4 py-2 text-paper-100 hover:bg-ink-200"
             }`}
           >
-            {prominent ? "Choose your film" : "Choose file"}
+            {asset
+              ? slot.role === "master"
+                ? "Replace film"
+                : slot.role === "subtitle"
+                  ? "Replace subtitle file"
+                  : "Replace poster"
+              : prominent
+                ? "Choose your film"
+                : "Choose file"}
             <input
               type="file"
               accept={slot.accept}
@@ -294,10 +305,10 @@ function Slot({
         )}
       </div>
 
-      {slot.role === "subtitle" && !asset && phase === "idle" && (
+      {slot.role === "subtitle" && phase === "idle" && (
         <div className="mt-4">
           <label htmlFor="sub-lang" className="block text-sm text-paper-300">
-            What language are these subtitles in?
+            {asset ? "Subtitle language (if replacing)" : "What language are these subtitles in?"}
           </label>
           <input
             id="sub-lang"

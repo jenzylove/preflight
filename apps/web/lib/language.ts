@@ -363,6 +363,8 @@ export function codecName(codec: string | null | undefined): string | null {
     hevc: "H.265",
     h265: "H.265",
     prores: "ProRes",
+    proreslt: "ProRes LT",
+    "prores lt": "ProRes LT",
     jpeg2000: "JPEG 2000",
     aac: "AAC",
     ac3: "AC-3",
@@ -383,8 +385,8 @@ export function codecName(codec: string | null | undefined): string | null {
  * passport and the worker log record.
  */
 const OPERATION_LABELS: Record<string, string> = {
-  normalise_loudness: "Adjusting audio loudness",
-  rewrite_container_metadata: "Updating delivery metadata",
+  normalise_loudness: "Adjust audio loudness",
+  rewrite_container_metadata: "Update delivery metadata",
   convert_subtitles: "Converting the subtitle file",
   resize_poster: "Resizing the poster",
   normalise_metadata: "Reformatting the delivery details",
@@ -475,6 +477,53 @@ export function whatYouCanDo(assetType: string, fieldName: string): string {
     ?? "This one needs a change Preflight will not make on your behalf. Make it "
        + "wherever you finish your film, then upload the new version."
   );
+}
+
+export interface RequirementAction {
+  label: string;
+  href: string;
+  instruction: string;
+}
+
+/** Give every unresolved requirement a concrete next click. */
+export function requirementAction(
+  assetType: string,
+  fieldName: string,
+  projectId: string,
+): RequirementAction {
+  if (assetType === "subtitle" && fieldName === "burnedIn") {
+    return {
+      label: "Replace film",
+      href: `/projects/${projectId}/master#master-upload`,
+      instruction: "Export the film with the required subtitle treatment, then replace the film in Preflight.",
+    };
+  }
+  if (assetType === "subtitle") {
+    return {
+      label: "Add subtitles",
+      href: `/projects/${projectId}/master#subtitle-upload`,
+      instruction: "Add the subtitle file, then run the check again.",
+    };
+  }
+  if (assetType === "poster") {
+    return {
+      label: "Add poster",
+      href: `/projects/${projectId}/master#poster-upload`,
+      instruction: "Add the poster file, then run the check again.",
+    };
+  }
+  if (assetType === "metadata" || assetType === "package") {
+    return {
+      label: "Edit delivery details",
+      href: `/projects/${projectId}/destinations`,
+      instruction: "Update the delivery details, then run the check again.",
+    };
+  }
+  return {
+    label: "Replace film",
+    href: `/projects/${projectId}/master#master-upload`,
+    instruction: "Replace the film with the corrected version, then run the check again.",
+  };
 }
 
 /** The one sentence that closes the loop after work done elsewhere. */

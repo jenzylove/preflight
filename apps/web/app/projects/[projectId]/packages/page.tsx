@@ -11,6 +11,7 @@ import {
   fieldLabel,
   formatValue,
   operationDone,
+  requirementAction,
   requirementSentence,
 } from "@/lib/language";
 import type {
@@ -148,11 +149,13 @@ function OutstandingGroup({
   blurb,
   checks,
   destination,
+  projectId,
 }: {
   title: string;
   blurb: string;
   checks: OutstandingCheck[];
   destination: string;
+  projectId: string;
 }) {
   if (checks.length === 0) return null;
 
@@ -190,6 +193,28 @@ function OutstandingGroup({
                 </span>
               )}
             </p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <h5 className="text-xs uppercase tracking-wide text-paper-500">Why Preflight won’t change it</h5>
+                <p className="mt-1 text-sm leading-relaxed text-paper-300">
+                  {check.result === "UNSUPPORTED"
+                    ? "This needs a creative or professional mastering decision, so Preflight will not change it automatically."
+                    : "Preflight needs the missing file or information before it can check this."}
+                </p>
+              </div>
+              <div>
+                <h5 className="text-xs uppercase tracking-wide text-paper-500">What you need to do</h5>
+                <p className="mt-1 text-sm leading-relaxed text-paper-200">
+                  {requirementAction(check.asset_type, check.field, projectId).instruction}
+                </p>
+                <Link
+                  href={requirementAction(check.asset_type, check.field, projectId).href}
+                  className="mt-3 inline-flex rounded-[3px] border border-line-strong px-3.5 py-2 text-sm text-paper-100 transition hover:bg-ink-200"
+                >
+                  {requirementAction(check.asset_type, check.field, projectId).label}
+                </Link>
+              </div>
+            </div>
             <details className="mt-2">
               <summary className="cursor-pointer text-xs text-paper-400 transition hover:text-paper-200">
                 Technical details
@@ -254,24 +279,17 @@ function PackageCard({
           delivery. */}
       <header className="border-b border-line px-6 py-5">
         <h3 className="font-display text-xl leading-snug text-paper-000">
-          {pkg.verified
-            ? `Your ${destinationName} package is ready`
-            : `Your ${destinationName} package is not ready yet`}
+          {pkg.verified ? `Your ${destinationName} package is ready` : `Not ready for ${destinationName}`}
         </h3>
         <p className="mt-2 text-sm text-paper-300">
-          {pkg.checks_total > 0
-            ? `${pkg.checks_passed} of ${pkg.checks_total} required checks pass`
-            : pkg.requirements_satisfied}
-          {fixed.length > 0 && (
-            <>
-              {" · "}
-              Preflight safely fixed {fixed.length}{" "}
-              {fixed.length === 1 ? "issue" : "issues"}
-            </>
-          )}
+          {!pkg.verified && fixed.length > 0
+            ? `Preflight fixed ${fixed.length} issue${fixed.length === 1 ? "" : "s"}. ${pkg.outstanding.length} still need you.`
+            : pkg.checks_total > 0
+              ? `${pkg.checks_passed} of ${pkg.checks_total} required checks pass`
+              : pkg.requirements_satisfied}
         </p>
 
-        {!pkg.verified && decisions.length > 0 && (
+        {!pkg.verified && pkg.outstanding.length > 0 && (
           <Link
             href={`/projects/${projectId}/preflight`}
             className="mt-4 inline-block rounded-[3px] bg-paper-000 px-4 py-2 text-sm
@@ -288,18 +306,21 @@ function PackageCard({
           blurb="Changes to the film itself. Preflight will not make these for you."
           checks={decisions}
           destination={destinationName}
+          projectId={projectId}
         />
         <OutstandingGroup
           title="Needs information or files from you"
           blurb="Preflight could not check these because it was not given what it needs."
           checks={missing}
           destination={destinationName}
+          projectId={projectId}
         />
         <OutstandingGroup
           title="Must be handled outside Preflight"
           blurb="No safe operation exists for these, so they need work elsewhere."
           checks={external}
           destination={destinationName}
+          projectId={projectId}
         />
 
         {fixed.length > 0 && (
