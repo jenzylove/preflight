@@ -54,6 +54,16 @@ class TestPlanConstruction:
         )]})
         assert plan.green[0].parameters["targetLufs"] == -24
 
+    def test_loudness_and_peak_share_one_step_with_their_own_targets(self):
+        plan = build_plan({"sundance": [
+            assertion(expected="eq -24", measured=-4.85),
+            assertion(field_name="truePeakDbtp", expected="lte -2", measured=-0.99,
+                      rule_id="peak", operation="normalise_loudness"),
+        ]})
+        assert len(plan.green) == 1
+        assert plan.green[0].parameters["targetLufs"] == -24
+        assert plan.green[0].parameters["truePeakDbtp"] == -2
+
     def test_a_passing_assertion_produces_no_work(self):
         plan = build_plan({"d": [assertion(result=Result.PASS)]})
         assert plan.steps == []

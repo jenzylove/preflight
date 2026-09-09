@@ -447,11 +447,27 @@ def _parameters_for(
 ) -> dict[str, Any]:
     if operation == "normalise_loudness":
         window = loudness_targets.get(destination_id)
+        related = related_assertions or [assertion]
+        loudness_assertion = next(
+            (candidate for candidate in related
+             if candidate.field_name == "integratedLoudnessLufs"),
+            assertion,
+        )
+        peak_assertion = next(
+            (candidate for candidate in related
+             if candidate.field_name == "truePeakDbtp"),
+            None,
+        )
         target = (
             round(sum(window) / 2, 2)
-            if window else (_numeric_target(assertion.expected) or -23.0)
+            if window else (_numeric_target(loudness_assertion.expected) or -23.0)
         )
-        return {"targetLufs": target, "truePeakDbtp": -3.0, "mode": "linear"}
+        peak = _numeric_target(peak_assertion.expected) if peak_assertion else None
+        return {
+            "targetLufs": target,
+            "truePeakDbtp": peak if peak is not None else -3.0,
+            "mode": "linear",
+        }
 
     if operation == "rewrite_container_metadata":
         # Every metadata correction for one destination is one step, and every
