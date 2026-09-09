@@ -38,7 +38,7 @@ from .tools.parallel_search import RetrievedSource, looks_like_injection
 
 logger = logging.getLogger("preflight.extract")
 
-PROMPT_VERSION = "2026-08-10.1"
+PROMPT_VERSION = "2026-09-09.2"
 
 
 def _field_catalogue() -> str:
@@ -75,6 +75,12 @@ Rules you may emit must satisfy all of the following:
    property=value (for example 'heightPx=2160'). Do not flatten a conditional
    table into unconditional rules — that turns one specification into a set of
    contradictions.
+
+6. Keep section and delivery-format scope. A naming convention stated in a DCP
+   section does not become a filename pattern for an online .mov file. Emit a
+   package.fileNamePattern rule only when the source states an actual pattern or
+   naming requirement for the delivery being described; a convention name alone
+   is not a pattern.
 
 Emit nothing rather than guessing. A missing rule is a gap the user can see and
 fill. An invented rule is a delivery that fails for a reason nobody can trace.

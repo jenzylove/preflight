@@ -18,6 +18,7 @@ from dataclasses import replace
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from preflight_contracts.requirement_corrections import is_dcp_only_isdcf_rule
 from preflight_contracts.rules import (
     AssetType,
     Confidence,
@@ -163,6 +164,14 @@ def load_project_rule_packs(
             rules.append(rule)
 
             if _needs_confirmation(rule_row):
+                unconfirmed.add(rule.rule_id)
+            elif rule_row.id not in set_aside and is_dcp_only_isdcf_rule(
+                rule, contract_evidence
+            ):
+                # Preserve the extracted rule and its citation, but force the
+                # existing per-project review/disposition path before it can
+                # block an online .mov delivery. The source's ISDCF sentence
+                # is scoped to DCPs, not the online screening file.
                 unconfirmed.add(rule.rule_id)
 
         raw = RulePack(

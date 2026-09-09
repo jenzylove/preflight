@@ -95,6 +95,9 @@ class TestApprovalEnforcement:
                 videoCodec="prores",
                 videoProfile=1,
                 videoBitrateBps=25_000_000,
+                colourPrimaries="bt709",
+                colourTransfer="gamma22",
+                colourMatrix="bt709",
                 audioCodec="pcm_s24le",
                 audioSampleRateHz=48_000,
             ),
@@ -110,6 +113,10 @@ class TestApprovalEnforcement:
         assert video["container"] == "mov"
         assert video["codec"] == "prores"
         assert str(video["profile"]).lower() == "lt"
+        assert video["colourPrimaries"] == "bt709"
+        # ffprobe's canonical name for the Rec.709 / 2.2 transfer is bt470m.
+        assert video["colourTransfer"] == "bt470m"
+        assert video["colourMatrix"] == "bt709"
         assert audio["codec"] == "pcm_s24le"
         assert audio["sampleRateHz"] == 48_000
 

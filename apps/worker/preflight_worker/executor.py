@@ -204,11 +204,17 @@ def _dispatch(
             video_profile=(int(parameters["videoProfile"])
                            if parameters.get("videoProfile") is not None else None),
             video_width_px=(int(parameters["videoWidthPx"])
-                           if parameters.get("videoWidthPx") is not None else None),
+                            if parameters.get("videoWidthPx") is not None else None),
             video_height_px=(int(parameters["videoHeightPx"])
                              if parameters.get("videoHeightPx") is not None else None),
             video_bitrate_bps=(int(parameters["videoBitrateBps"])
                                if parameters.get("videoBitrateBps") is not None else None),
+            colour_primaries=(str(parameters["colourPrimaries"])
+                              if parameters.get("colourPrimaries") is not None else None),
+            colour_transfer=(str(parameters["colourTransfer"])
+                             if parameters.get("colourTransfer") is not None else None),
+            colour_matrix=(str(parameters["colourMatrix"])
+                           if parameters.get("colourMatrix") is not None else None),
             container=container,
             audio_codec=parameters.get("audioCodec"),
             audio_sample_rate_hz=(int(parameters["audioSampleRateHz"])

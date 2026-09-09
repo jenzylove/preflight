@@ -172,6 +172,35 @@ class TestSafetyClassification:
         assert conform.parameters["videoCodec"] == "prores"
         assert conform.parameters["videoProfile"] == 1
 
+    def test_unmeasured_colour_tags_join_the_approved_technical_conform(self):
+        plan = build_plan({
+            "sundance": [
+                assertion(field_name="codec", asset=AssetType.VIDEO,
+                          result=Result.REVIEW_REQUIRED, operation=None,
+                          rule_id="v-codec", measured="h264",
+                          expected="eq Apple ProRes LT"),
+                assertion(field_name="colourPrimaries", asset=AssetType.VIDEO,
+                          result=Result.NOT_MEASURED, operation=None,
+                          rule_id="v-primaries", measured=None,
+                          expected="eq Rec 709"),
+                assertion(field_name="colourTransfer", asset=AssetType.VIDEO,
+                          result=Result.NOT_MEASURED, operation=None,
+                          rule_id="v-transfer", measured=None,
+                          expected="eq 2.2"),
+                assertion(field_name="colourMatrix", asset=AssetType.VIDEO,
+                          result=Result.NOT_MEASURED, operation=None,
+                          rule_id="v-matrix", measured=None,
+                          expected="eq Rec 709"),
+            ]
+        })
+        conform = plan.technical_conform[0]
+        assert set(conform.resolves) == {
+            "v-codec", "v-primaries", "v-transfer", "v-matrix"
+        }
+        assert conform.parameters["colourPrimaries"] == "bt709"
+        assert conform.parameters["colourTransfer"] == "gamma22"
+        assert conform.parameters["colourMatrix"] == "bt709"
+
 
 class TestUnresolved:
     def test_an_ambiguous_requirement_asks_the_user_rather_than_guessing(self):

@@ -20,9 +20,11 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
+import tempfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
@@ -187,6 +189,9 @@ def technical_conform(
     video_width_px: int | None = None,
     video_height_px: int | None = None,
     video_bitrate_bps: int | None = None,
+    colour_primaries: str | None = None,
+    colour_transfer: str | None = None,
+    colour_matrix: str | None = None,
     container: str | None = None,
     audio_codec: str | None = None,
     audio_sample_rate_hz: int | None = None,
@@ -226,7 +231,6 @@ def technical_conform(
         args += ["-vf", f"scale={width}:{height}:flags=lanczos"]
     if video_bitrate_bps:
         args += ["-b:v", str(int(video_bitrate_bps))]
-
     if audio_codec:
         args += ["-c:a", audio_codec]
     else:
@@ -238,10 +242,51 @@ def technical_conform(
     if target_container in {"mov", "mp4"}:
         args += ["-movflags", "+faststart"]
 
-    args.append(str(output))
+    # Some ProRes encoders preserve matrix metadata but drop primaries and
+    # transfer tags while encoding. Encode first, then remux the new file with
+    # the exact destination signalling so the independent ffprobe measurement
+    # sees what we actually wrote.
+    colour_args = []
+    if colour_primaries:
+        colour_args += ["-color_primaries", colour_primaries]
+    if colour_transfer:
+        colour_args += ["-color_trc", colour_transfer]
+    if colour_matrix:
+        colour_args += ["-colorspace", colour_matrix]
+
+    intermediate: Path | None = None
+    encode_output = output
+    if colour_args:
+        handle, raw_path = tempfile.mkstemp(
+            prefix=f".{output.stem}.", suffix=output.suffix, dir=output.parent
+        )
+        os.close(handle)
+        Path(raw_path).unlink(missing_ok=True)
+        intermediate = Path(raw_path)
+        encode_output = intermediate
+
+    args.append(str(encode_output))
     proc = _run(args)
     if proc.returncode != 0:
+        if intermediate is not None:
+            intermediate.unlink(missing_ok=True)
         raise RepairError(f"technical conform failed: {proc.stderr.strip()[-400:]}")
+
+    if intermediate is not None:
+        remux = [
+            "ffmpeg", "-y", "-hide_banner", "-nostats", "-i", str(intermediate),
+            "-map", "0", "-c", "copy", *colour_args,
+        ]
+        if target_container in {"mov", "mp4"}:
+            remux += ["-movflags", "+faststart"]
+        remux.append(str(output))
+        metadata_proc = _run(remux)
+        intermediate.unlink(missing_ok=True)
+        if metadata_proc.returncode != 0:
+            raise RepairError(
+                f"technical conform metadata write failed: "
+                f"{metadata_proc.stderr.strip()[-400:]}"
+            )
 
     return RepairResult(
         operation="technical_conform",
@@ -253,6 +298,9 @@ def technical_conform(
             "videoWidthPx": video_width_px,
             "videoHeightPx": video_height_px,
             "videoBitrateBps": video_bitrate_bps,
+            "colourPrimaries": colour_primaries,
+            "colourTransfer": colour_transfer,
+            "colourMatrix": colour_matrix,
             "container": target_container,
             "audioCodec": audio_codec,
             "audioSampleRateHz": audio_sample_rate_hz,

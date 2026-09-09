@@ -284,14 +284,22 @@ def build_plan(
                 })
                 continue
 
+            operation: str | None = None
             if assertion.result is Result.NOT_MEASURED:
-                plan.unresolved.append({
-                    "destination": destination_id,
-                    "field": f"{assertion.asset_type.value}.{assertion.field_name}",
-                    "reason": "This property was not measured on the assets supplied.",
-                    "needs": "missing_asset",
-                })
-                continue
+                # Colour signalling is metadata on the video stream, not an
+                # unknowable property. If the destination names exact values,
+                # write them as part of the approved conform and verify them
+                # on the resulting MOV. Other unmeasured fields remain honest
+                # missing-input findings.
+                operation = _missing_measurement_operation(assertion)
+                if operation is None:
+                    plan.unresolved.append({
+                        "destination": destination_id,
+                        "field": f"{assertion.asset_type.value}.{assertion.field_name}",
+                        "reason": "This property was not measured on the assets supplied.",
+                        "needs": "missing_asset",
+                    })
+                    continue
 
             if assertion.result is Result.UNSUPPORTED:
                 plan.blocked.append({
@@ -304,7 +312,7 @@ def build_plan(
                 })
                 continue
 
-            operation = assertion.repair_operation or _yellow_operation(assertion)
+            operation = operation or assertion.repair_operation or _yellow_operation(assertion)
             if operation is None:
                 plan.blocked.append({
                     "destination": destination_id,
@@ -320,11 +328,17 @@ def build_plan(
             spec = OPERATION_CATALOGUE[operation]
             related = [
                 candidate for candidate in assertions
-                if candidate.result not in {
-                    Result.PASS, Result.NOT_APPLICABLE, Result.AMBIGUOUS,
-                    Result.NOT_MEASURED, Result.UNSUPPORTED,
-                }
-                and (candidate.repair_operation or _yellow_operation(candidate)) == operation
+                if (
+                    candidate.result not in {
+                        Result.PASS, Result.NOT_APPLICABLE, Result.AMBIGUOUS,
+                        Result.UNSUPPORTED,
+                    }
+                    or (
+                        candidate.result is Result.NOT_MEASURED
+                        and operation == "technical_conform"
+                    )
+                )
+                and _operation_for_assertion(candidate) == operation
             ] or [assertion]
             parameters = _parameters_for(
                 operation, assertion, destination_id, loudness_targets, related, assertions
@@ -403,6 +417,25 @@ def _yellow_operation(assertion: Assertion) -> str | None:
     if assertion.asset_type is AssetType.SUBTITLE:
         return "translate_subtitles"
     return None
+
+
+def _missing_measurement_operation(assertion: Assertion) -> str | None:
+    """Return a measured-write operation for exact missing colour tags only."""
+    if (
+        assertion.asset_type is AssetType.VIDEO
+        and assertion.field_name in {"colourPrimaries", "colourTransfer", "colourMatrix"}
+        and assertion.expected.strip().lower().startswith(("eq ", "one of "))
+    ):
+        return "technical_conform"
+    return None
+
+
+def _operation_for_assertion(assertion: Assertion) -> str | None:
+    return (
+        assertion.repair_operation
+        or _yellow_operation(assertion)
+        or _missing_measurement_operation(assertion)
+    )
 
 
 #: Formats the subtitle converter can actually write.
@@ -501,6 +534,9 @@ TECHNICAL_CONFORM_FIELDS: set[tuple[AssetType, str]] = {
     (AssetType.VIDEO, "widthPx"),
     (AssetType.VIDEO, "heightPx"),
     (AssetType.VIDEO, "bitrateBps"),
+    (AssetType.VIDEO, "colourPrimaries"),
+    (AssetType.VIDEO, "colourTransfer"),
+    (AssetType.VIDEO, "colourMatrix"),
     (AssetType.AUDIO, "codec"),
     (AssetType.AUDIO, "sampleRateHz"),
     (AssetType.AUDIO, "bitrateBps"),
@@ -615,6 +651,18 @@ def _technical_conform_parameters(
             target = _numeric_target(assertion.expected)
             if target is not None:
                 params["videoBitrateBps"] = int(target)
+        elif assertion.asset_type is AssetType.VIDEO and field == "colourPrimaries":
+            target = _colour_target(assertion.expected)
+            if target:
+                params["colourPrimaries"] = target
+        elif assertion.asset_type is AssetType.VIDEO and field == "colourTransfer":
+            target = _colour_target(assertion.expected)
+            if target:
+                params["colourTransfer"] = target
+        elif assertion.asset_type is AssetType.VIDEO and field == "colourMatrix":
+            target = _colour_target(assertion.expected)
+            if target:
+                params["colourMatrix"] = target
         elif assertion.asset_type is AssetType.AUDIO and field == "codec":
             target = _codec_target(assertion.expected, AssetType.AUDIO)
             if target:
@@ -664,6 +712,24 @@ def _technical_conform_parameters(
         # hidden change to the published requirement.
         params["container"] = "mov"
     return params
+
+
+def _colour_target(expected: str) -> str | None:
+    """Map published colour names to ffmpeg's canonical option values."""
+    value = (_exact_expected(expected) or "").strip().lower()
+    compact = re.sub(r"[\s._/-]+", "", value)
+    aliases = {
+        "rec709": "bt709",
+        "iturbt709": "bt709",
+        "bt709": "bt709",
+        "gamma22": "gamma22",
+        "22": "gamma22",
+        "gamma2.2": "gamma22",
+        "bt2020": "bt2020",
+        "rec2020": "bt2020",
+        "iturbt2020": "bt2020",
+    }
+    return aliases.get(compact, value or None)
 
 
 #: Metadata rewrite must follow loudness normalisation, because normalisation

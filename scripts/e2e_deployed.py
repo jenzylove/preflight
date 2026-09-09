@@ -229,6 +229,37 @@ def main() -> int:
     )
     check("assertions carry their source", cited > 0, f"{cited} cited")
 
+    if requested_slug == "sundance":
+        status, extracted_rules = request(
+            f"{API}/v1/projects/{project_id}/rules", token=token,
+        )
+        isdcf_rules = [
+            rule for rule in (extracted_rules if isinstance(extracted_rules, list) else [])
+            if rule.get("asset_type") == "package"
+            and rule.get("field") == "fileNamePattern"
+            and str(rule.get("expected", "")).strip().lower() == "isdcf"
+        ]
+        for rule in isdcf_rules:
+            print("  ISDCF extracted source:", json.dumps({
+                "rule_id": rule.get("rule_id"),
+                "source_url": rule.get("source_url"),
+                "source_excerpt": rule.get("source_excerpt"),
+            }, sort_keys=True))
+        isdcf_assertions = [
+            assertion for destination in run["destinations"]
+            for assertion in destination.get("assertions", [])
+            if assertion.get("asset_type") == "package"
+            and assertion.get("field") == "fileNamePattern"
+        ]
+        check(
+            "DCP-only ISDCF extraction is held for review",
+            bool(isdcf_rules)
+            and bool(isdcf_assertions)
+            and all(assertion.get("result") == "AMBIGUOUS"
+                    for assertion in isdcf_assertions),
+            f"{len(isdcf_rules)} extracted rule(s)",
+        )
+
     print("\nREPAIR PLAN")
     plan = run.get("plan") or {}
     green = [s for s in plan.get("steps", []) if s["safety"] == "green"]

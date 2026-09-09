@@ -196,6 +196,8 @@ def _norm(value: Any) -> Any:
             "lpcm": "pcm", "pcms16le": "pcm", "pcms24le": "pcm",
             "proreslt": "prores",
             "apple prores lt": "prores",
+            "gamma22": "bt470m",
+            "bt470m": "bt470m",
             "subrip": "srt", "webvtt": "vtt",
             "jpg": "jpeg",
             "bt709": "bt709", "rec709": "bt709", "itur bt709": "bt709",
