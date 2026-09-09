@@ -188,6 +188,24 @@ class TestPicturePreservation:
 
 
 class TestDependencyHandling:
+    def test_dependency_order_is_topological_even_when_storage_order_is_not(self, master, tmp_path):
+        steps = [
+            {**step(
+                "technical_conform", step_id="s02", output_role="conformed",
+                container="mov", videoCodec="prores",
+                videoProfile=1, audioCodec="pcm_s24le",
+            ), "depends_on": ("s01",)},
+            step("normalise_loudness", step_id="s01", output_role="normalised",
+                 targetLufs=-19.5),
+        ]
+        result = run_job(
+            steps, inputs={"master": master}, work_dir=tmp_path,
+            plan_digest=PLAN, approved_digest=PLAN,
+        )
+        assert [outcome.step_id for outcome in result.outcomes] == ["s01", "s02"]
+        assert all(outcome.status == "SUCCEEDED" for outcome in result.outcomes)
+        assert result.outcomes[1].input_sha256 == result.outcomes[0].output_sha256
+
     def test_a_step_whose_dependency_failed_is_not_attempted(self, tmp_path):
         steps = [
             step("normalise_loudness", step_id="s01"),

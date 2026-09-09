@@ -248,6 +248,7 @@ def run_job(
     that does not exist would produce a package that looks complete and is not.
     """
     result = JobResult(plan_digest=plan_digest)
+    steps = _dependency_order(steps)
     produced: dict[str, Path] = dict(inputs)
     failed_steps: set[str] = set()
 
@@ -279,6 +280,41 @@ def run_job(
             failed_steps.add(outcome.step_id)
 
     return result
+
+
+def _dependency_order(steps: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Topologically order persisted steps before checking their outcomes.
+
+    Database queries do not promise insertion order. Checking a dependency
+    only against ``failed_steps`` is therefore insufficient: a conform could
+    run before the safe repair it depends on, simply because its UUID sorted
+    first. Missing or cyclic dependencies are refused rather than guessed.
+    """
+    by_id = {str(step.get("step_id", "")): step for step in steps}
+    ordered: list[dict[str, Any]] = []
+    visiting: set[str] = set()
+    visited: set[str] = set()
+
+    def visit(step_id: str) -> None:
+        if step_id in visited:
+            return
+        if step_id in visiting:
+            raise ExecutionRefused("repair plan contains a dependency cycle")
+        step = by_id.get(step_id)
+        if step is None:
+            raise ExecutionRefused(
+                f"repair plan references missing dependency {step_id!r}"
+            )
+        visiting.add(step_id)
+        for dependency in step.get("depends_on", ()) or ():
+            visit(str(dependency))
+        visiting.remove(step_id)
+        visited.add(step_id)
+        ordered.append(step)
+
+    for step in steps:
+        visit(str(step.get("step_id", "")))
+    return ordered
 
 
 def assemble_package(
