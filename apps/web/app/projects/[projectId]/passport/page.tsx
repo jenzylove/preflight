@@ -97,7 +97,7 @@ function PassportView({ projectId }: { projectId: string }) {
 
       <article className="rounded-[3px] border border-line bg-ink-100">
         <header className="border-b border-line px-7 py-6">
-          <p className="slate text-paper-400">Release passport</p>
+          <p className="slate text-paper-400">Package proof</p>
           <h2 className="mt-2 font-display text-2xl text-paper-000">
             {body.projectTitle ?? project.title}
           </h2>

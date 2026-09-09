@@ -72,8 +72,6 @@ function Packages({ projectId }: { projectId: string }) {
     return <p className="slate text-paper-400" role="status">Loading</p>;
   }
 
-  const verified = packages.filter((p) => p.verified);
-
   return (
     <>
       <ProjectRail project={project} />
@@ -122,14 +120,14 @@ function Packages({ projectId }: { projectId: string }) {
         ))}
       </div>
 
-      {verified.length > 0 && (
+      {packages.length > 0 && (
         <div className="mt-10 flex justify-end">
           <Link
             href={`/projects/${projectId}/passport`}
             className="rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium
                        text-ink-000 transition hover:bg-white"
           >
-            Open the release passport
+            View package proof
           </Link>
         </div>
       )}
@@ -270,6 +268,9 @@ function PackageCard({
   );
   const external = pkg.outstanding.filter((c) => c.result === "UNSUPPORTED");
   const fixed = pkg.transformations;
+  const checksSummary = pkg.checks_total > 0
+    ? `${pkg.checks_passed} of ${pkg.checks_total} required checks pass`
+    : pkg.requirements_satisfied;
 
   return (
     <section className="rounded-[3px] border border-line bg-ink-100">
@@ -278,26 +279,38 @@ function PackageCard({
           "subtitle.cueCount (NOT_MEASURED)" as the outcome of somebody's
           delivery. */}
       <header className="border-b border-line px-6 py-5">
+        <p className="slate text-paper-400">{destinationName} package</p>
         <h3 className="font-display text-xl leading-snug text-paper-000">
-          {pkg.verified ? `Your ${destinationName} package is ready` : `Not ready for ${destinationName}`}
+          {pkg.verified ? `Verified for ${destinationName}` : "Prepared — not ready for delivery"}
         </h3>
         <p className="mt-2 text-sm text-paper-300">
-          {!pkg.verified && fixed.length > 0
-            ? `Preflight fixed ${fixed.length} issue${fixed.length === 1 ? "" : "s"}. ${pkg.outstanding.length} still need you.`
-            : pkg.checks_total > 0
-              ? `${pkg.checks_passed} of ${pkg.checks_total} required checks pass`
-              : pkg.requirements_satisfied}
+          {checksSummary}
         </p>
-
-        {!pkg.verified && pkg.outstanding.length > 0 && (
-          <Link
-            href={`/projects/${projectId}/preflight`}
-            className="mt-4 inline-block rounded-[3px] bg-paper-000 px-4 py-2 text-sm
-                       font-medium text-ink-000 transition hover:bg-white"
-          >
-            Resolve remaining issues
-          </Link>
+        {!pkg.verified && (
+          <p className="mt-1 text-sm text-paper-300">
+            {pkg.outstanding.length} blocker{pkg.outstanding.length === 1 ? "" : "s"} remain
+          </p>
         )}
+
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <DownloadPackage pkg={pkg} projectId={projectId} />
+          <Link
+            href={`/projects/${projectId}/passport`}
+            className="rounded-[3px] border border-line-strong px-4 py-2 text-sm
+                       text-paper-100 transition hover:bg-ink-200"
+          >
+            View package proof
+          </Link>
+          {!pkg.verified && pkg.outstanding.length > 0 && (
+            <Link
+              href={`/projects/${projectId}/preflight`}
+              className="text-sm text-paper-300 underline underline-offset-4
+                         transition hover:text-paper-100"
+            >
+              Resolve remaining issues
+            </Link>
+          )}
+        </div>
       </header>
 
       <div className="px-5 py-5">
@@ -366,7 +379,7 @@ function PackageCard({
           </div>
         )}
 
-        {pkg.verified && pkg.limitations.length > 0 && (
+        {pkg.limitations.length > 0 && (
           <details className="mb-5">
             <summary className="cursor-pointer text-xs text-paper-400 hover:text-paper-200">
               Stated limitations ({pkg.limitations.length})
@@ -404,6 +417,54 @@ function PackageCard({
         )}
       </div>
     </section>
+  );
+}
+
+function DownloadPackage({
+  pkg,
+  projectId,
+}: {
+  pkg: PackageSummary;
+  projectId: string;
+}) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function download() {
+    setBusy(true);
+    setError(null);
+    try {
+      const intent = await api.packageDownload(projectId, pkg.id);
+      window.location.assign(intent.url);
+    } catch (caught) {
+      setError(
+        caught instanceof Error ? caught.message : "Could not prepare the package download.",
+      );
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => void download()}
+        disabled={busy}
+        className="rounded-[3px] bg-paper-000 px-4 py-2 text-sm font-medium
+                   text-ink-000 transition hover:bg-white disabled:opacity-50"
+      >
+        {busy
+          ? "Preparing…"
+          : pkg.verified
+            ? "Download verified package"
+            : "Download prepared package"}
+      </button>
+      {error && (
+        <p role="alert" className="mt-2 text-xs text-stop">
+          {error}
+        </p>
+      )}
+    </div>
   );
 }
 
