@@ -260,9 +260,9 @@ function Processing({ job, steps, projectId, destinationName, remainingCount, fi
   const failed = job.state === "FAILED" || job.state === "CANCELLED";
   return <section className="rounded-[3px] border border-line bg-ink-100 p-6">
     <div className="flex flex-wrap items-baseline justify-between gap-3"><h3 className="font-display text-lg text-paper-000">{finished ? `${steps.length} safe fix${steps.length === 1 ? "" : "es"} completed` : failed ? "Processing stopped" : "Applying safe fixes"}</h3><StatusChip tone={finished ? "ok" : failed ? "stop" : "think"}>{job.state.toLowerCase()}</StatusChip></div>
-    <p className="mt-3 max-w-measure text-sm leading-relaxed text-paper-300">{finished ? `Your ${destinationName} package has been checked again from the files Preflight produced.` : job.message}</p>
+    <p className="mt-3 max-w-measure text-sm leading-relaxed text-paper-300">{finished ? "Safe fixes completed. Preflight rechecked the new files." : job.message}</p>
     {!finished && !failed && <Working label="Applying the safe fixes to a copy of your film" />}
-    {finished && <><p className="mt-5 max-w-measure text-sm leading-relaxed text-paper-200">Your {destinationName} delivery is still not ready. {remainingCount} issue{remainingCount === 1 ? " needs" : "s need"} you.</p><Link href={`/projects/${projectId}/packages`} className="mt-5 inline-flex rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium text-ink-000 transition hover:bg-white">Resolve remaining issues</Link></>}
+    {finished && <><Link href={`/projects/${projectId}/packages`} className="mt-5 inline-flex rounded-[3px] bg-paper-000 px-5 py-2.5 text-sm font-medium text-ink-000 transition hover:bg-white">See recheck result</Link></>}
     {failed && <p className="mt-4 border-l-2 border-stop bg-stop-bg/30 py-3 pl-4 text-sm text-paper-100">Your original files are untouched. Nothing was marked ready.</p>}
   </section>;
 }
