@@ -143,6 +143,19 @@ class TestSafetyClassification:
         assert conform.parameters["videoCodec"] == "libx264"
         assert conform.parameters["videoBitrateBps"] == 25_000_000
 
+    def test_apple_prores_name_maps_to_the_worker_codec(self):
+        plan = build_plan({
+            "sundance": [assertion(
+                field_name="codec", asset=AssetType.VIDEO,
+                result=Result.REVIEW_REQUIRED, operation=None,
+                rule_id="v-codec", measured="h264",
+                expected="eq Apple ProRes LT",
+            )]
+        })
+        conform = plan.technical_conform[0]
+        assert conform.parameters["videoCodec"] == "prores"
+        assert conform.parameters["videoProfile"] == 1
+
 
 class TestUnresolved:
     def test_an_ambiguous_requirement_asks_the_user_rather_than_guessing(self):

@@ -526,10 +526,7 @@ def _codec_target(expected: str, asset_type: AssetType) -> str | None:
         return None
     normalised = [_normalised(option) for option in options]
     if asset_type is AssetType.VIDEO:
-        if any(
-            value in {"proreslt", "prores"} or value.startswith("prores")
-            for value in normalised
-        ):
+        if any("prores" in value for value in normalised):
             return "prores"
         if any(value in {"h264", "avc", "avc1"} for value in normalised):
             return "libx264"
@@ -577,7 +574,7 @@ def _technical_conform_parameters(
             if target:
                 params["videoCodec"] = target
                 option = _normalised(_exact_expected(assertion.expected) or "")
-                if option == "proreslt" or option == "lt":
+                if "proreslt" in option or option == "lt":
                     params["videoProfile"] = 1
         elif assertion.asset_type is AssetType.VIDEO and field == "profile":
             target = _profile_target(assertion.expected)

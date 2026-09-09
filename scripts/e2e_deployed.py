@@ -181,9 +181,15 @@ def main() -> int:
     check("unreadable destinations disclosed",
           any(not d.get("available") for d in listed))
 
+    requested_slug = os.environ.get("E2E_DESTINATION_SLUG", "").strip()
+    selected = (
+        [d for d in available if d.get("slug") == requested_slug]
+        if requested_slug else available[:2]
+    )
+    check("requested destination available", bool(selected), requested_slug or "default set")
     status, selection = request(
         f"{API}/v1/projects/{project_id}/destinations", "PUT",
-        {"destination_ids": [d["id"] for d in available[:2]]}, token=token,
+        {"destination_ids": [d["id"] for d in selected]}, token=token,
     )
     check("destinations selected", status == 200)
 
@@ -199,10 +205,19 @@ def main() -> int:
     total_assertions = sum(len(d["assertions"]) for d in run["destinations"])
     check("assertions produced by the deterministic engine", total_assertions > 0,
           f"{total_assertions} across {len(run['destinations'])} destinations")
+    print("  failing assertions:", json.dumps([
+        {"destination": d.get("destination_id"), "field": a.get("field"),
+         "expected": a.get("expected"), "measured": a.get("measured"),
+         "result": a.get("result")}
+        for d in run["destinations"] for a in d.get("assertions", [])
+        if a.get("result") not in ("PASS", "NOT_APPLICABLE")
+    ], sort_keys=True))
     check("comparison digest present", bool(run.get("comparison_digest")))
 
     hard = [c for c in run.get("conflicts", []) if c.get("strength") == "hard"]
-    check("cross-destination conflict detected", len(run.get("conflicts", [])) > 0,
+    check("cross-destination conflict detected",
+          bool(requested_slug) or len(run.get("conflicts", [])) > 0,
+          "single destination acceptance" if requested_slug else
           f"{len(hard)} hard, {len(run.get('conflicts', [])) - len(hard)} soft")
 
     cited = sum(
@@ -221,6 +236,10 @@ def main() -> int:
     check("technical conform step(s) are executable after approval",
           len(conform) >= 1 and all(s["executable"] for s in conform),
           f"{len(conform)} conform step(s)")
+    print("  conform parameters:", json.dumps(
+        [{"destination": s.get("destination"), "parameters": s.get("parameters", {})}
+         for s in conform], sort_keys=True
+    ))
     check("human decisions remain non-executable",
           all(not s["executable"] for s in human),
           f"{len(human)} shown but blocked")
@@ -265,12 +284,14 @@ def main() -> int:
             if final in ("SUCCEEDED", "FAILED", "CANCELLED"):
                 break
         time.sleep(10)
-    check("worker reached a terminal state", final in ("SUCCEEDED", "FAILED"), final)
+    check("worker completed the approved repair plan", final == "SUCCEEDED", final)
 
     print("\nPACKAGES AND VALIDATION")
     status, packages = request(f"{API}/v1/projects/{project_id}/packages", token=token)
     packages = packages if isinstance(packages, list) else []
-    check("a package exists per destination", len(packages) >= 2, f"{len(packages)} built")
+    expected_packages = len(selected)
+    check("a package exists per destination", len(packages) >= expected_packages,
+          f"{len(packages)} built")
     check("packages were validated against their outputs",
           all(p.get("validator_version") for p in packages) if packages else False)
     verified = [p for p in packages if p.get("verified")]
