@@ -500,7 +500,7 @@ export function requirementAction(
   }
   if (assetType === "subtitle") {
     return {
-      label: "Add subtitles",
+      label: "Add subtitle file",
       href: `/projects/${projectId}/master#subtitle-upload`,
       instruction: "Add the subtitle file, then run the check again.",
     };

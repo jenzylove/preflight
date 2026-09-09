@@ -498,7 +498,7 @@ function Finding({
       : formatValue(assertion.measured, assertion.field);
 
   return (
-    <li className="rounded-[3px] bg-ink-000/40 px-4 py-3.5">
+    <li id={`rule-${assertion.rule_id}`} className="rounded-[3px] bg-ink-000/40 px-4 py-3.5">
       <div className="flex flex-wrap items-baseline justify-between gap-3">
         <span className="text-sm font-medium text-paper-000">{label}</span>
         {setAside && <StatusChip tone="idle">You set this aside</StatusChip>}
