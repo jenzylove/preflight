@@ -130,8 +130,12 @@ def normalise_loudness(
             "cannot normalise: no measurable programme loudness (is the audio silent?)"
         )
 
+    # FFmpeg's loudnorm parser on the production image rejects a trailing
+    # .0 for some exact integer targets (notably I=-24.0). Use compact numeric
+    # formatting so the approved destination value remains the same while the
+    # filter receives the portable spelling I=-24.
     loudnorm = (
-        f"loudnorm=I={target_lufs}:TP={true_peak_dbtp}:LRA={loudness_range_lu}"
+        f"loudnorm=I={target_lufs:g}:TP={true_peak_dbtp:g}:LRA={loudness_range_lu:g}"
         f":measured_I={stats['input_i']}:measured_TP={stats['input_tp']}"
         f":measured_LRA={stats['input_lra']}:measured_thresh={stats['input_thresh']}"
         f":offset={stats.get('target_offset', 0)}:linear=true:print_format=json"
