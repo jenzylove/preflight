@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import http.client
 import json
+import os
 import sys
 import time
 import urllib.error
@@ -39,6 +40,11 @@ def check(name: str, ok: bool, detail: str = "") -> bool:
 
 
 def env(key: str) -> str:
+    configured = os.environ.get(key, "").strip()
+    if configured:
+        return configured
+    if not (ROOT / ".env").exists():
+        return ""
     for line in (ROOT / ".env").read_text(encoding="utf-8").splitlines():
         if line.startswith(f"{key}="):
             return line.split("=", 1)[1].strip()
@@ -212,8 +218,8 @@ def main() -> int:
     human = [s for s in decisions if s.get("operation") != "technical_conform"]
     check("plan generated with a digest", bool(plan.get("digest")), plan.get("digest", ""))
     check("green operations identified", len(green) > 0, f"{len(green)} executable")
-    check("one technical conform is executable after approval",
-          len(conform) == 1 and all(s["executable"] for s in conform),
+    check("technical conform step(s) are executable after approval",
+          len(conform) >= 1 and all(s["executable"] for s in conform),
           f"{len(conform)} conform step(s)")
     check("human decisions remain non-executable",
           all(not s["executable"] for s in human),

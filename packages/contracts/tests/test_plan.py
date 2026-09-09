@@ -127,6 +127,22 @@ class TestSafetyClassification:
         assert plan.blocked[0]["safety"] == "red"
         assert "new mix" in plan.blocked[0]["reason"]
 
+    def test_bitrate_only_conform_reencodes_the_current_passing_codec(self):
+        plan = build_plan({
+            "sundance": [
+                assertion(field_name="codec", asset=AssetType.VIDEO,
+                          result=Result.PASS, rule_id="v-codec",
+                          measured="h264", expected="eq h264"),
+                assertion(field_name="bitrateBps", asset=AssetType.VIDEO,
+                          result=Result.REVIEW_REQUIRED, operation=None,
+                          rule_id="v-bitrate", measured=8_000_000,
+                          expected="between 20_000_000 and 30_000_000"),
+            ]
+        })
+        conform = plan.technical_conform[0]
+        assert conform.parameters["videoCodec"] == "libx264"
+        assert conform.parameters["videoBitrateBps"] == 25_000_000
+
 
 class TestUnresolved:
     def test_an_ambiguous_requirement_asks_the_user_rather_than_guessing(self):

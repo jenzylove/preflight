@@ -327,7 +327,7 @@ def build_plan(
                 and (candidate.repair_operation or _yellow_operation(candidate)) == operation
             ] or [assertion]
             parameters = _parameters_for(
-                operation, assertion, destination_id, loudness_targets, related
+                operation, assertion, destination_id, loudness_targets, related, assertions
             )
 
             if operation == "convert_subtitles" and not parameters.get("targetFormat"):
@@ -443,6 +443,7 @@ def _parameters_for(
     destination_id: str,
     loudness_targets: dict[str, tuple[float, float]],
     related_assertions: list[Assertion] | None = None,
+    context_assertions: list[Assertion] | None = None,
 ) -> dict[str, Any]:
     if operation == "normalise_loudness":
         window = loudness_targets.get(destination_id)
@@ -458,7 +459,9 @@ def _parameters_for(
         # Video/container/audio conversions are one coherent conform. This is
         # deliberate: five independent re-encodes would compound quality loss
         # and could never be described as one explicit user approval.
-        return _technical_conform_parameters(related_assertions or [assertion])
+        return _technical_conform_parameters(
+            related_assertions or [assertion], context_assertions or []
+        )
 
     if operation == "convert_subtitles":
         target = _subtitle_target(assertion.expected)
@@ -563,7 +566,9 @@ def _metadata_parameters(assertions: list[Assertion]) -> dict[str, Any]:
     return params
 
 
-def _technical_conform_parameters(assertions: list[Assertion]) -> dict[str, Any]:
+def _technical_conform_parameters(
+    assertions: list[Assertion], context_assertions: list[Assertion]
+) -> dict[str, Any]:
     params: dict[str, Any] = {}
     for assertion in assertions:
         field = assertion.field_name
@@ -606,6 +611,35 @@ def _technical_conform_parameters(assertions: list[Assertion]) -> dict[str, Any]
             target = _numeric_target(assertion.expected)
             if target is not None:
                 params["audioBitrateBps"] = int(target)
+    if "videoBitrateBps" in params and "videoCodec" not in params:
+        current = next(
+            (
+                candidate.measured for candidate in context_assertions
+                if candidate.result is Result.PASS
+                and candidate.asset_type is AssetType.VIDEO
+                and candidate.field_name == "codec"
+            ),
+            None,
+        )
+        if current:
+            target = _codec_target(f"eq {current}", AssetType.VIDEO)
+            if target:
+                params["videoCodec"] = target
+    if "audioBitrateBps" in params or "audioSampleRateHz" in params:
+        if "audioCodec" not in params:
+            current = next(
+                (
+                    candidate.measured for candidate in context_assertions
+                    if candidate.result is Result.PASS
+                    and candidate.asset_type is AssetType.AUDIO
+                    and candidate.field_name == "codec"
+                ),
+                None,
+            )
+            if current:
+                target = _codec_target(f"eq {current}", AssetType.AUDIO)
+                if target:
+                    params["audioCodec"] = target
     if params.get("container") is None and (
         params.get("videoCodec") == "prores" or params.get("audioCodec") == "pcm_s24le"
     ):
