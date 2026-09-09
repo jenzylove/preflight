@@ -418,28 +418,43 @@ def _persist_plan(project: Project, run, plan: Plan, session: Session) -> Repair
     if existing is not None:
         return existing
 
-    row = RepairPlan(
+    plan_row = RepairPlan(
         project_id=project.id,
         preflight_run_id=run.id,
         digest=digest,
         state="DRAFT",
         estimated_seconds=plan.estimated_seconds(project.runtime_seconds or 60),
     )
-    session.add(row)
+    session.add(plan_row)
     session.flush()
 
+    rows_by_plan_step_id: dict[str, RepairStep] = {}
     for step in plan.steps:
-        session.add(RepairStep(
-            repair_plan_id=row.id,
+        step_row = RepairStep(
+            repair_plan_id=plan_row.id,
             operation=step.operation,
             safety_level=step.safety.value,
             output_role=step.output_role,
             parameters_json=step.parameters,
-            dependency_ids_json=list(step.depends_on),
+            # Dependencies are filled after all rows have UUIDs. The pure
+            # planner uses stable s01-style ids; the worker receives database
+            # UUIDs and must be able to stop a downstream conform if its
+            # predecessor failed.
+            dependency_ids_json=[],
             state="PLANNED",
-        ))
+        )
+        session.add(step_row)
+        session.flush()
+        rows_by_plan_step_id[step.step_id] = step_row
+    for step in plan.steps:
+        step_row = rows_by_plan_step_id[step.step_id]
+        step_row.dependency_ids_json = [
+            str(rows_by_plan_step_id[dependency].id)
+            for dependency in step.depends_on
+            if dependency in rows_by_plan_step_id
+        ]
     session.flush()
-    return row
+    return plan_row
 
 
 class ApprovalIn(BaseModel):
